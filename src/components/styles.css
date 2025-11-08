@@ -1,0 +1,43 @@
+body {
+  background-color: black;
+  font-family: 'Courier New', Courier, monospace;
+}
+
+.terminal-outline {
+  border: 2px solid green;
+  padding: 8px;
+  box-sizing: content-box;
+}
+
+/* Main box */
+.terminal-box {
+  width: 600px;
+  padding: 40px;
+  border: 6px solid green;
+  background-color: black;
+  color: green;
+  text-align: left;
+  box-sizing: border-box;
+}
+
+.welcome-text {
+  font-weight: bold;
+  font-size: 18px;
+  margin-bottom: 20px;
+}
+
+.options {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.option {
+  margin-bottom: 10px;
+  font-weight: 400;
+  transition: font-weight 0.2s ease;
+}
+
+.option.active {
+  font-weight: 700;
+}
