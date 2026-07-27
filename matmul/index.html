@@ -1,0 +1,486 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>matmul — Niranjan</title>
+  <meta name="description" content="Interactive matrix multiplication visualizer — each row vector keeps its color through the dot product." />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>✕</text></svg>" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700;800&display=swap" />
+  <style>
+    :root {
+      --bg: #0e0e0e;
+      --fg: #f5f5f0;
+      --muted: #8a8a82;
+      --accent: #f5a524;
+      --line: #2a2a26;
+      --s: 52px;   /* cell size */
+      --g: 6px;    /* cell gap */
+      --vl: 68%;   /* vector color lightness */
+      --vs: 42%;   /* vector color saturation */
+    }
+    @media (prefers-color-scheme: light) {
+      :root { --bg: #f5f5f0; --fg: #0e0e0e; --muted: #5a5a52; --accent: #b86d00; --line: #d8d8d0; --vl: 38%; --vs: 48%; }
+    }
+    @media (max-width: 720px) {
+      :root { --s: 40px; --g: 5px; }
+    }
+
+    * { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; }
+    body {
+      background: var(--bg);
+      color: var(--fg);
+      font-family: "Berkeley Mono", "TX-02", "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      min-height: 100dvh;
+      padding: 2rem 1rem 4rem;
+      line-height: 1.5;
+    }
+    main { max-width: 72rem; margin: 0 auto; }
+
+    header { text-align: center; margin-bottom: 1.5rem; }
+    header h1 { font-size: 1.4rem; font-weight: 800; margin: 0 0 .25rem; letter-spacing: .02em; }
+    header a, footer a { color: var(--muted); text-decoration: none; border-bottom: 1px dotted var(--muted); }
+    header a:hover, footer a:hover { color: var(--accent); border-color: var(--accent); }
+    .home { display: inline-block; margin-bottom: 1rem; font-size: .8rem; }
+    footer { text-align: center; color: var(--muted); font-size: .7rem; margin-top: 3.5rem; }
+
+    /* ---- controls ---- */
+    .controls, .actions {
+      display: flex; flex-wrap: wrap; justify-content: center; align-items: center;
+      gap: 1rem 1.75rem; margin: 0 0 1rem;
+    }
+    .dim { display: flex; align-items: center; gap: .5rem; font-size: .8rem; color: var(--muted); }
+    .dim b { color: var(--fg); font-weight: 700; min-width: 1.1em; text-align: center; }
+    .dim button {
+      width: 1.6rem; height: 1.6rem; border-radius: 6px; border: 1px solid var(--line);
+      background: transparent; color: var(--fg); font: inherit; cursor: pointer; line-height: 1;
+    }
+    .dim button:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+    .dim button:disabled { opacity: .3; cursor: default; }
+
+    .actions button {
+      font: inherit; font-size: .85rem; font-weight: 700; cursor: pointer;
+      padding: .45rem 1.1rem; border-radius: 8px; border: 1px solid var(--line);
+      background: transparent; color: var(--fg);
+    }
+    .actions button:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+    .actions button:disabled { opacity: .3; cursor: default; }
+    .actions #multiply { border-color: var(--accent); color: var(--accent); }
+    .actions #multiply:hover:not(:disabled) { background: var(--accent); color: var(--bg); }
+    .speed { display: flex; align-items: center; gap: .5rem; font-size: .75rem; color: var(--muted); }
+    .speed input { accent-color: var(--accent); width: 90px; }
+
+    /* ---- stage / equation ---- */
+    #stage {
+      position: relative;
+      padding-top: var(--reserve, 16px);
+      transition: padding-top .35s ease;
+      overflow-x: auto; overflow-y: hidden;
+    }
+    .equation {
+      display: flex; justify-content: center; align-items: center;
+      gap: clamp(.5rem, 2vw, 1.25rem);
+      min-width: max-content; margin: 0 auto; padding: 0 .5rem;
+    }
+    .op { color: var(--muted); font-size: 1.3rem; user-select: none; }
+
+    .mat { text-align: center; }
+    .mat .label { color: var(--muted); font-size: .7rem; margin-bottom: .4rem; }
+    .brackets { position: relative; padding: 8px 12px; display: inline-block; transition: opacity .3s ease; }
+    .brackets::before, .brackets::after {
+      content: ''; position: absolute; top: 0; bottom: 0; width: 9px;
+      border: 2px solid var(--fg);
+    }
+    .brackets::before { left: 0; border-right: none; }
+    .brackets::after  { right: 0; border-left: none; }
+    .ghost .brackets { opacity: .15; }
+
+    .grid { display: grid; gap: var(--g); }
+    .cell {
+      width: var(--s); height: var(--s);
+      display: flex; align-items: center; justify-content: center;
+      font-size: calc(var(--s) * .34); font-weight: 500;
+      border: 1px solid var(--line); border-radius: 6px;
+      background: color-mix(in srgb, var(--fg) 3%, transparent);
+    }
+    .cell input {
+      width: 100%; height: 100%; border: 0; background: transparent; color: inherit;
+      font: inherit; text-align: center; outline: none; border-radius: 6px;
+      appearance: textfield; -moz-appearance: textfield;
+    }
+    .cell input::-webkit-outer-spin-button, .cell input::-webkit-inner-spin-button { appearance: none; margin: 0; }
+    .cell input:focus { box-shadow: inset 0 0 0 2px var(--accent); }
+    .cell.empty { color: var(--muted); border-style: dashed; background: transparent; }
+    .cell.result {
+      color: var(--vc); border-color: color-mix(in srgb, var(--vc) 45%, transparent);
+      background: color-mix(in srgb, var(--vc) 14%, transparent);
+      animation: pop .35s ease;
+      font-weight: 700;
+    }
+    .cell.long { font-size: calc(var(--s) * .26); }
+    @keyframes pop { 0% { transform: scale(.5); } 60% { transform: scale(1.15); } 100% { transform: scale(1); } }
+
+    /* ---- flyer (rotated B sweeping over A) ---- */
+    #flyer {
+      position: absolute; z-index: 5;
+      transition-property: left, top, opacity;
+      transition-timing-function: cubic-bezier(.45, 0, .25, 1);
+    }
+    #flyer.fade { opacity: 0; }
+    #flyer .fgrid {
+      display: grid; gap: var(--g);
+      transition: transform .7s cubic-bezier(.5, 0, .3, 1);
+    }
+    #flyer.rot .fgrid { transform: rotate(-90deg); }
+    .chip {
+      width: var(--s); height: var(--s);
+      display: flex; align-items: center; justify-content: center;
+      border-radius: 6px;
+      background: color-mix(in srgb, var(--vc) 14%, var(--bg));
+      border: 1px solid color-mix(in srgb, var(--vc) 50%, transparent);
+    }
+    .chip span {
+      color: var(--vc); font-weight: 700; font-size: calc(var(--s) * .34);
+      transition: transform .7s cubic-bezier(.5, 0, .3, 1);
+      white-space: nowrap;
+    }
+    #flyer.rot .chip span { transform: rotate(90deg); }
+    .chip.mul span { font-size: calc(var(--s) * .27); }
+    .chip.mul.long span { font-size: calc(var(--s) * .21); }
+
+    /* ---- readout ---- */
+    #readout {
+      margin: 1.5rem auto 0; max-width: 34rem; min-height: 2rem;
+      font-size: .8rem; text-align: center;
+      display: flex; flex-direction: column; gap: .2rem;
+      max-height: 10.5rem; overflow-y: auto;
+    }
+    #readout .line { color: var(--vc); opacity: .45; }
+    #readout .line.now { opacity: 1; }
+    #readout sub { font-size: .65em; }
+  </style>
+</head>
+<body>
+<main>
+  <header>
+    <a class="home" href="/">← niranjan</a>
+    <h1>matrix multiplication</h1>
+  </header>
+
+  <div class="controls">
+    <div class="dim"><span>rows of A</span> <button data-dim="m" data-d="-1">−</button><b id="mval"></b><button data-dim="m" data-d="1">+</button></div>
+    <div class="dim"><span>cols A · rows B</span> <button data-dim="n" data-d="-1">−</button><b id="nval"></b><button data-dim="n" data-d="1">+</button></div>
+    <div class="dim"><span>cols of B</span> <button data-dim="p" data-d="-1">−</button><b id="pval"></b><button data-dim="p" data-d="1">+</button></div>
+  </div>
+
+  <div class="actions">
+    <button id="multiply">multiply</button>
+    <button id="pause" disabled>pause</button>
+    <button id="reset">reset</button>
+    <label class="speed">speed <input id="speed" type="range" min="0.5" max="3" step="0.25" value="1" /></label>
+  </div>
+
+  <div id="stage">
+    <div class="equation">
+      <div class="mat"><div class="label">A</div><div class="brackets"><div class="grid" id="gridA"></div></div></div>
+      <div class="op">×</div>
+      <div class="mat" id="matB"><div class="label">B</div><div class="brackets"><div class="grid" id="gridB"></div></div></div>
+      <div class="op">=</div>
+      <div class="mat"><div class="label">A×B</div><div class="brackets"><div class="grid" id="gridC"></div></div></div>
+    </div>
+  </div>
+
+  <div id="readout" aria-live="polite"></div>
+
+  <footer>
+    after <a href="http://matrixmultiplication.xyz" target="_blank" rel="noopener">matrixmultiplication.xyz</a>
+    by <a href="https://github.com/staltz/matrixmultiplication.xyz" target="_blank" rel="noopener">André Staltz</a>
+  </footer>
+</main>
+
+<script>
+(() => {
+  const $ = (id) => document.getElementById(id);
+  const stage = $('stage'), gridA = $('gridA'), gridB = $('gridB'), gridC = $('gridC');
+  const matB = $('matB'), readout = $('readout');
+  const btnMul = $('multiply'), btnPause = $('pause'), btnReset = $('reset'), speedInput = $('speed');
+
+  const MAXD = 6, MIND = 1;
+  const state = {
+    m: 2, n: 3, p: 2,
+    A: [], B: [],
+    running: false, paused: false, stopFlag: false, speed: 1,
+  };
+  let flyer = null;
+
+  const rand = () => 1 + Math.floor(Math.random() * 9);
+  const colorFor = (j) => `hsl(${(200 + (j - 1) * 360 / state.p) % 360} var(--vs) var(--vl))`;
+
+  function resizeGrid(M, rows, cols) {
+    const out = [];
+    for (let r = 0; r < rows; r++) {
+      out.push([]);
+      for (let c = 0; c < cols; c++) out[r].push(M[r]?.[c] ?? rand());
+    }
+    return out;
+  }
+
+  function px(name) { return parseFloat(getComputedStyle(document.documentElement).getPropertyValue(name)); }
+
+  /* ---------- rendering ---------- */
+  function renderInputs(grid, M, rows, cols, name) {
+    grid.style.gridTemplateColumns = `repeat(${cols}, var(--s))`;
+    grid.innerHTML = '';
+    for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) {
+      const cell = document.createElement('div');
+      cell.className = 'cell';
+      const inp = document.createElement('input');
+      inp.type = 'number'; inp.value = M[r][c];
+      inp.setAttribute('aria-label', `${name}[${r + 1}][${c + 1}]`);
+      inp.addEventListener('change', () => {
+        let v = parseInt(inp.value, 10);
+        if (!Number.isFinite(v)) v = 0;
+        v = Math.max(-99, Math.min(99, v));
+        inp.value = v; M[r][c] = v;
+      });
+      cell.appendChild(inp);
+      grid.appendChild(cell);
+    }
+  }
+
+  function renderC() {
+    gridC.style.gridTemplateColumns = `repeat(${state.p}, var(--s))`;
+    gridC.innerHTML = '';
+    for (let r = 0; r < state.m; r++) for (let c = 0; c < state.p; c++) {
+      const cell = document.createElement('div');
+      cell.className = 'cell empty';
+      cell.id = `c-${r + 1}-${c + 1}`;
+      cell.textContent = '·';
+      gridC.appendChild(cell);
+    }
+  }
+
+  function renderAll() {
+    state.A = resizeGrid(state.A, state.m, state.n);
+    state.B = resizeGrid(state.B, state.n, state.p);
+    renderInputs(gridA, state.A, state.m, state.n, 'A');
+    renderInputs(gridB, state.B, state.n, state.p, 'B');
+    renderC();
+    $('mval').textContent = state.m; $('nval').textContent = state.n; $('pval').textContent = state.p;
+    document.querySelectorAll('.dim button').forEach(b => {
+      const v = state[b.dataset.dim], d = +b.dataset.d;
+      b.disabled = state.running || (d < 0 ? v <= MIND : v >= MAXD);
+    });
+  }
+
+  /* ---------- flyer ---------- */
+  function buildFlyer() {
+    flyer = document.createElement('div');
+    flyer.id = 'flyer';
+    const fg = document.createElement('div');
+    fg.className = 'fgrid';
+    fg.style.gridTemplateColumns = `repeat(${state.p}, var(--s))`;
+    for (let r = 1; r <= state.n; r++) for (let c = 1; c <= state.p; c++) {
+      const chip = document.createElement('div');
+      chip.className = 'chip';
+      chip.id = `chip-${r}-${c}`;
+      chip.style.setProperty('--vc', colorFor(c));
+      const span = document.createElement('span');
+      span.textContent = state.B[r - 1][c - 1];
+      chip.appendChild(span);
+      fg.appendChild(chip);
+    }
+    flyer.appendChild(fg);
+    stage.appendChild(flyer);
+    placeAt(bCenter(), 0);
+  }
+
+  function metrics() {
+    const S = px('--s'), G = px('--g');
+    return {
+      S, G, pitch: S + G,
+      W: state.p * S + (state.p - 1) * G,   // flyer unrotated width
+      H: state.n * S + (state.n - 1) * G,   // flyer unrotated height
+    };
+  }
+
+  function bCenter() {
+    const b = gridB.getBoundingClientRect(), st = stage.getBoundingClientRect();
+    return { x: b.left - st.left + stage.scrollLeft + b.width / 2, y: b.top - st.top + b.height / 2 };
+  }
+
+  function placeAt(center, dur) {
+    const { W, H } = metrics();
+    flyer.style.transitionDuration = `${dur}ms`;
+    flyer.style.left = `${center.x - W / 2}px`;
+    flyer.style.top = `${center.y - H / 2}px`;
+  }
+
+  // t = 0: hovering just above row 1 of A; t >= 1: bottom chip-row covers A row t.
+  function positionFlyer(t, dur) {
+    const { S, G, pitch } = metrics();
+    const a = gridA.getBoundingClientRect(), st = stage.getBoundingClientRect();
+    const visH = state.p * S + (state.p - 1) * G;
+    const cx = a.left - st.left + stage.scrollLeft + a.width / 2;
+    const bottom = (a.top - st.top) + (t === 0 ? -G - 4 : (t - 1) * pitch + S);
+    placeAt({ x: cx, y: bottom - visH / 2 }, dur / state.speed);
+  }
+
+  /* ---------- animation ---------- */
+  function wait(ms) {
+    return new Promise((res, rej) => {
+      let el = 0;
+      const iv = setInterval(() => {
+        if (state.stopFlag) { clearInterval(iv); rej('stop'); return; }
+        if (!state.paused) { el += 40 * state.speed; if (el >= ms) { clearInterval(iv); res(); } }
+      }, 40);
+    });
+  }
+
+  function activePairs(t) {
+    const acts = [];
+    for (let j = 1; j <= state.p; j++) {
+      const i = t - (j - 1);
+      if (i >= 1 && i <= state.m) acts.push({ i, j });
+    }
+    return acts;
+  }
+
+  function showOverlap(acts) {
+    readout.querySelectorAll('.line.now').forEach(l => l.classList.remove('now'));
+    for (const { i, j } of acts) {
+      const terms = [];
+      let sum = 0;
+      for (let k = 1; k <= state.n; k++) {
+        const a = state.A[i - 1][k - 1], b = state.B[k - 1][j - 1];
+        sum += a * b;
+        terms.push(`${a}·${b}`);
+        const chip = $(`chip-${k}-${j}`);
+        chip.classList.add('mul');
+        chip.classList.toggle('long', `${a}·${b}`.length > 4);
+        chip.firstChild.textContent = `${a}·${b}`;
+      }
+      const line = document.createElement('div');
+      line.className = 'line now';
+      line.style.setProperty('--vc', colorFor(j));
+      line.innerHTML = `c<sub>${i}${j}</sub> = ${terms.join(' + ')} = ${sum}`;
+      readout.appendChild(line);
+      readout.scrollTop = readout.scrollHeight;
+    }
+  }
+
+  function fillResults(acts) {
+    for (const { i, j } of acts) {
+      let sum = 0;
+      for (let k = 1; k <= state.n; k++) sum += state.A[i - 1][k - 1] * state.B[k - 1][j - 1];
+      const cell = $(`c-${i}-${j}`);
+      cell.classList.remove('empty');
+      cell.classList.add('result');
+      cell.classList.toggle('long', String(sum).length > 3);
+      cell.style.setProperty('--vc', colorFor(j));
+      cell.textContent = sum;
+    }
+  }
+
+  function clearOverlap(acts) {
+    for (const { i, j } of acts) {
+      for (let k = 1; k <= state.n; k++) {
+        const chip = $(`chip-${k}-${j}`);
+        chip.classList.remove('mul', 'long');
+        chip.firstChild.textContent = state.B[k - 1][j - 1];
+      }
+    }
+  }
+
+  function setRunningUI(on) {
+    state.running = on;
+    btnMul.disabled = on;
+    btnPause.disabled = !on;
+    document.querySelectorAll('.dim button').forEach(b => b.disabled = on);
+    document.querySelectorAll('.cell input').forEach(i => i.disabled = on);
+  }
+
+  function cleanup() {
+    if (flyer) { flyer.remove(); flyer = null; }
+    matB.classList.remove('ghost');
+    stage.style.setProperty('--reserve', '16px');
+    setRunningUI(false);
+    state.paused = false;
+    btnPause.textContent = 'pause';
+    // restore dim-button enabled/disabled bounds
+    document.querySelectorAll('.dim button').forEach(b => {
+      const v = state[b.dataset.dim], d = +b.dataset.d;
+      b.disabled = d < 0 ? v <= MIND : v >= MAXD;
+    });
+    document.querySelectorAll('.cell input').forEach(i => i.disabled = false);
+  }
+
+  async function run() {
+    if (state.running) return;
+    renderC();
+    readout.innerHTML = '';
+    state.stopFlag = false;
+    setRunningUI(true);
+    try {
+      const { S, G } = metrics();
+      stage.style.setProperty('--reserve', `${state.p * S + (state.p - 1) * G + 28}px`);
+      await wait(380);
+      buildFlyer();
+      matB.classList.add('ghost');
+      await wait(220);
+      flyer.classList.add('rot');            // rotate 90° ccw, digits stay upright
+      await wait(780);
+      positionFlyer(0, 550);                 // glide to just above A
+      await wait(640);
+      for (let t = 1; t <= state.m + state.p - 1; t++) {
+        positionFlyer(t, 380);
+        await wait(430);
+        const acts = activePairs(t);
+        showOverlap(acts);
+        await wait(520);
+        fillResults(acts);
+        await wait(680);
+        clearOverlap(acts);
+      }
+      await wait(150);
+      flyer.style.transitionDuration = '400ms';
+      flyer.classList.add('fade');
+      await wait(450);
+    } catch (e) {
+      if (e !== 'stop') throw e;
+    } finally {
+      cleanup();
+    }
+  }
+
+  /* ---------- wiring ---------- */
+  document.querySelectorAll('.dim button').forEach(b =>
+    b.addEventListener('click', () => {
+      if (state.running) return;
+      const dim = b.dataset.dim;
+      state[dim] = Math.max(MIND, Math.min(MAXD, state[dim] + (+b.dataset.d)));
+      renderAll();
+    })
+  );
+  btnMul.addEventListener('click', run);
+  btnPause.addEventListener('click', () => {
+    state.paused = !state.paused;
+    btnPause.textContent = state.paused ? 'resume' : 'pause';
+  });
+  btnReset.addEventListener('click', () => {
+    state.stopFlag = true;
+    setTimeout(() => { renderC(); readout.innerHTML = ''; }, 60);
+  });
+  speedInput.addEventListener('input', () => { state.speed = parseFloat(speedInput.value); });
+
+  state.A = [[1, 2, 3], [4, 5, 6]];
+  state.B = [[1, 4], [2, 5], [3, 6]];
+  renderAll();
+  if (location.hash === '#auto') run();
+})();
+</script>
+</body>
+</html>
