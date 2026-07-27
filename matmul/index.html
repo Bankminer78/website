@@ -68,8 +68,8 @@
     }
     .actions button:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
     .actions button:disabled { opacity: .3; cursor: default; }
-    .actions #multiply { border-color: var(--accent); color: var(--accent); }
-    .actions #multiply:hover:not(:disabled) { background: var(--accent); color: var(--bg); }
+    .actions #multiply, .actions #attnstep { border-color: var(--accent); color: var(--accent); }
+    .actions #multiply:hover:not(:disabled), .actions #attnstep:hover:not(:disabled) { background: var(--accent); color: var(--bg); }
     .speed { display: flex; align-items: center; gap: .5rem; font-size: .75rem; color: var(--muted); }
     .speed input { accent-color: var(--accent); width: 90px; }
 
@@ -285,7 +285,7 @@
   <section id="view-attn" hidden>
     <div class="legend" id="attnlegend"></div>
     <div id="attnwrap"></div>
-    <div class="actions"><button id="attnplay">play</button><button id="attnstep">step</button><button id="attnend">to end</button></div>
+    <div class="actions"><button id="attnstep">step</button><button id="attnplay">play</button><button id="attnend">to end</button></div>
     <p class="cap"><b>attention is two matmuls.</b>
     <b>routing:</b> S = Q·Kᵀ dots every query row with every key row — the transpose trick turns a stack of rows into an all-pairs dot grid — and softmax makes each score row a set of weights.
     <b>mixing:</b> out = W·V is the row-stack view — each output token is a weighted blend of the value rows, and its color is the blend of the tokens it read from.</p>
@@ -907,11 +907,7 @@
   function renderView() {
     if (view === 'rows') renderRows();
     if (view === 'trans') renderTrans();
-    if (view === 'attn') {
-      renderAttn();
-      attnMode = 'play'; attnFinish = false; attnSteps = 0;
-      setTimeout(() => { if (view === 'attn') playAttn(); }, 350);
-    }
+    if (view === 'attn') renderAttn(); // waits for step or play — no auto-run
   }
   document.querySelectorAll('.tab').forEach(tb =>
     tb.addEventListener('click', () => {
