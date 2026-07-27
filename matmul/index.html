@@ -73,11 +73,42 @@
     .speed { display: flex; align-items: center; gap: .5rem; font-size: .75rem; color: var(--muted); }
     .speed input { accent-color: var(--accent); width: 90px; }
 
+    .tabs { display: flex; justify-content: center; gap: .5rem; margin-bottom: 1.25rem; }
+    .tab {
+      font: inherit; font-size: .75rem; cursor: pointer;
+      padding: .35rem .95rem; border-radius: 999px;
+      border: 1px solid var(--line); background: transparent; color: var(--muted);
+    }
+    .tab:hover { color: var(--accent); border-color: var(--accent); }
+    .tab.active { color: var(--accent); border-color: var(--accent); font-weight: 700; }
+
+    /* ---- static views ---- */
+    #view-rows { --s: 36px; }
+    #view-trans { --s: 40px; }
+    #rowswrap, #transwrap { overflow-x: auto; padding: 0 .5rem; }
+    .rline {
+      display: flex; justify-content: center; align-items: center;
+      gap: .75rem; margin: .6rem auto; min-width: max-content;
+    }
+    .vstack { text-align: center; color: var(--muted); margin: 1.2rem 0 .8rem; font-size: .85rem; }
+    .tpanels { display: flex; justify-content: center; gap: 3.5rem; flex-wrap: wrap; align-items: flex-start; min-width: max-content; margin: 0 auto; }
+    .tpanel { text-align: center; }
+    .tpanel h2 { font-size: .78rem; color: var(--muted); font-weight: 500; margin: 0 0 1.1rem; line-height: 1.7; }
+    .tpanel h2 b { color: var(--fg); }
+    .teq { display: flex; justify-content: center; align-items: center; gap: .7rem; }
+    .cell.tint {
+      color: var(--vc); font-weight: 700;
+      border-color: color-mix(in srgb, var(--vc) 45%, transparent);
+      background: color-mix(in srgb, var(--vc) 14%, transparent);
+    }
+    .cap { text-align: center; color: var(--muted); font-size: .75rem; max-width: 38rem; margin: 1.6rem auto 0; }
+
     /* ---- stage / equation ---- */
     #stage {
       position: relative;
       padding-top: var(--reserve, 16px);
-      transition: padding-top .35s ease;
+      padding-bottom: var(--reserve-bot, 0px);
+      transition: padding-top .35s ease, padding-bottom .35s ease;
       overflow-x: auto; overflow-y: hidden;
     }
     .equation {
@@ -141,7 +172,9 @@
       border-radius: 6px;
       background: color-mix(in srgb, var(--vc) 14%, var(--bg));
       border: 1px solid color-mix(in srgb, var(--vc) 50%, transparent);
+      transition: opacity .45s ease;
     }
+    .chip.done { opacity: .15; }
     .chip span {
       color: var(--vc); font-weight: 700; font-size: calc(var(--s) * .34);
       transition: transform .7s cubic-bezier(.5, 0, .3, 1);
@@ -170,6 +203,12 @@
     <h1>matrix multiplication</h1>
   </header>
 
+  <div class="tabs">
+    <button class="tab active" data-view="sweep">sweep</button>
+    <button class="tab" data-view="rows">row stack</button>
+    <button class="tab" data-view="trans">transpose</button>
+  </div>
+
   <div class="controls">
     <div class="dim"><span>rows of A</span> <button data-dim="m" data-d="-1">−</button><b id="mval"></b><button data-dim="m" data-d="1">+</button></div>
     <div class="dim"><span>cols A · rows B</span> <button data-dim="n" data-d="-1">−</button><b id="nval"></b><button data-dim="n" data-d="1">+</button></div>
@@ -183,17 +222,31 @@
     <label class="speed">speed <input id="speed" type="range" min="0.5" max="3" step="0.25" value="1" /></label>
   </div>
 
-  <div id="stage">
-    <div class="equation">
-      <div class="mat"><div class="label">A</div><div class="brackets"><div class="grid" id="gridA"></div></div></div>
-      <div class="op">×</div>
-      <div class="mat" id="matB"><div class="label">B</div><div class="brackets"><div class="grid" id="gridB"></div></div></div>
-      <div class="op">=</div>
-      <div class="mat"><div class="label">A×B</div><div class="brackets"><div class="grid" id="gridC"></div></div></div>
+  <section id="view-sweep">
+    <div id="stage">
+      <div class="equation">
+        <div class="mat"><div class="label">A</div><div class="brackets"><div class="grid" id="gridA"></div></div></div>
+        <div class="op">×</div>
+        <div class="mat" id="matB"><div class="label">B</div><div class="brackets"><div class="grid" id="gridB"></div></div></div>
+        <div class="op">=</div>
+        <div class="mat"><div class="label">A×B</div><div class="brackets"><div class="grid" id="gridC"></div></div></div>
+      </div>
     </div>
-  </div>
+    <div id="readout" aria-live="polite"></div>
+  </section>
 
-  <div id="readout" aria-live="polite"></div>
+  <section id="view-rows" hidden>
+    <div id="rowswrap"></div>
+    <p class="cap">each row of A hits B on its own: a<sub>i</sub> is a 1×n matrix and a<sub>i</sub>·B is its own little matmul.
+    stacking the results vertically rebuilds the product — <code>A@B = vstack(a₁@B, …, a_m@B)</code>.</p>
+  </section>
+
+  <section id="view-trans" hidden>
+    <div id="transwrap"></div>
+    <p class="cap">math thinks in column vectors: y = A·x. code usually stores x as a row, so the same product is written y = x·Aᵀ.
+    transposing flips the whole equation — (A·x)ᵀ = xᵀ·Aᵀ — same numbers, laid on their side.
+    (here x is the first column of B.)</p>
+  </section>
 
   <footer>
     after <a href="http://matrixmultiplication.xyz" target="_blank" rel="noopener">matrixmultiplication.xyz</a>
@@ -217,7 +270,20 @@
   let flyer = null;
 
   const rand = () => 1 + Math.floor(Math.random() * 9);
-  const colorFor = (j) => `hsl(${(200 + (j - 1) * 360 / state.p) % 360} var(--vs) var(--vl))`;
+  const colorFor = (j, total = state.p) => `hsl(${(200 + (j - 1) * 360 / total) % 360} var(--vs) var(--vl))`;
+
+  function computeC() {
+    const C = [];
+    for (let i = 0; i < state.m; i++) {
+      C.push([]);
+      for (let j = 0; j < state.p; j++) {
+        let s = 0;
+        for (let k = 0; k < state.n; k++) s += state.A[i][k] * state.B[k][j];
+        C[i].push(s);
+      }
+    }
+    return C;
+  }
 
   function resizeGrid(M, rows, cols) {
     const out = [];
@@ -274,6 +340,84 @@
       const v = state[b.dataset.dim], d = +b.dataset.d;
       b.disabled = state.running || (d < 0 ? v <= MIND : v >= MAXD);
     });
+  }
+
+  /* ---------- static views ---------- */
+  function staticMatrix(vals, label, colorFn) {
+    const mat = document.createElement('div');
+    mat.className = 'mat';
+    if (label != null) {
+      const l = document.createElement('div');
+      l.className = 'label'; l.innerHTML = label;
+      mat.appendChild(l);
+    }
+    const br = document.createElement('div'); br.className = 'brackets';
+    const g = document.createElement('div'); g.className = 'grid';
+    g.style.gridTemplateColumns = `repeat(${vals[0].length}, var(--s))`;
+    vals.forEach((row, r) => row.forEach((v, c) => {
+      const cell = document.createElement('div');
+      cell.className = 'cell';
+      const col = colorFn && colorFn(r, c);
+      if (col) { cell.classList.add('tint'); cell.style.setProperty('--vc', col); }
+      if (String(v).length > 3) cell.classList.add('long');
+      cell.textContent = v;
+      g.appendChild(cell);
+    }));
+    br.appendChild(g); mat.appendChild(br);
+    return mat;
+  }
+  const opEl = (s) => { const d = document.createElement('div'); d.className = 'op'; d.textContent = s; return d; };
+
+  function renderRows() {
+    const wrap = $('rowswrap');
+    wrap.innerHTML = '';
+    const C = computeC();
+    const byCol = (r, c) => colorFor(c + 1);
+    for (let i = 0; i < state.m; i++) {
+      const line = document.createElement('div');
+      line.className = 'rline';
+      line.appendChild(staticMatrix([state.A[i]], i === 0 ? `a<sub>${i + 1}</sub> (row of A)` : `a<sub>${i + 1}</sub>`));
+      line.appendChild(opEl('×'));
+      line.appendChild(staticMatrix(state.B, i === 0 ? 'B' : null));
+      line.appendChild(opEl('='));
+      line.appendChild(staticMatrix([C[i]], i === 0 ? `a<sub>${i + 1}</sub>·B` : null, byCol));
+      wrap.appendChild(line);
+    }
+    const v = document.createElement('div');
+    v.className = 'vstack'; v.textContent = '⇓ stack the rows';
+    wrap.appendChild(v);
+    const last = document.createElement('div');
+    last.className = 'rline';
+    last.appendChild(staticMatrix(C, 'A×B', byCol));
+    wrap.appendChild(last);
+  }
+
+  function renderTrans() {
+    const wrap = $('transwrap');
+    wrap.innerHTML = '';
+    const x = state.B.map(r => [r[0]]);
+    const y = state.A.map(row => [row.reduce((s, a, k) => s + a * x[k][0], 0)]);
+    const AT = state.A[0].map((_, c) => state.A.map(r => r[c]));
+    const xT = [x.map(r => r[0])];
+    const yT = [y.map(r => r[0])];
+    const panels = document.createElement('div');
+    panels.className = 'tpanels';
+    const mk = (title, parts) => {
+      const p = document.createElement('div'); p.className = 'tpanel';
+      const h = document.createElement('h2'); h.innerHTML = title; p.appendChild(h);
+      const eq = document.createElement('div'); eq.className = 'teq';
+      parts.forEach(el => eq.appendChild(el)); p.appendChild(eq);
+      return p;
+    };
+    panels.appendChild(mk('math · column vectors<br><b>y = A·x</b>', [
+      staticMatrix(state.A, 'A'), opEl('×'), staticMatrix(x, 'x'), opEl('='),
+      staticMatrix(y, 'y', (r) => colorFor(r + 1, state.m)),
+    ]));
+    panels.appendChild(mk('code · row vectors<br><b>y = x·Aᵀ</b>', [
+      staticMatrix(xT, 'xᵀ'), opEl('×'), staticMatrix(AT, 'Aᵀ'), opEl('='),
+      staticMatrix(yT, 'yᵀ', (r, c) => colorFor(c + 1, state.m)),
+    ]));
+    wrap.appendChild(panels);
   }
 
   /* ---------- flyer ---------- */
@@ -407,6 +551,7 @@
     if (flyer) { flyer.remove(); flyer = null; }
     matB.classList.remove('ghost');
     stage.style.setProperty('--reserve', '16px');
+    stage.style.setProperty('--reserve-bot', '0px');
     setRunningUI(false);
     state.paused = false;
     btnPause.textContent = 'pause';
@@ -425,8 +570,9 @@
     state.stopFlag = false;
     setRunningUI(true);
     try {
-      const { S, G } = metrics();
+      const { S, G, pitch } = metrics();
       stage.style.setProperty('--reserve', `${state.p * S + (state.p - 1) * G + 28}px`);
+      stage.style.setProperty('--reserve-bot', `${state.p * pitch + 12}px`);
       await wait(380);
       buildFlyer();
       matB.classList.add('ghost');
@@ -444,6 +590,9 @@
         fillResults(acts);
         await wait(680);
         clearOverlap(acts);
+        // a vector that just finished its last dot product fades out
+        for (const { i, j } of acts) if (i === state.m)
+          for (let k = 1; k <= state.n; k++) $(`chip-${k}-${j}`).classList.add('done');
       }
       await wait(150);
       flyer.style.transitionDuration = '400ms';
@@ -457,12 +606,31 @@
   }
 
   /* ---------- wiring ---------- */
+  let view = 'sweep';
+  function renderView() {
+    if (view === 'rows') renderRows();
+    if (view === 'trans') renderTrans();
+  }
+  document.querySelectorAll('.tab').forEach(tb =>
+    tb.addEventListener('click', () => {
+      if (tb.dataset.view === view) return;
+      if (state.running) state.stopFlag = true;
+      view = tb.dataset.view;
+      document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.view === view));
+      $('view-sweep').hidden = view !== 'sweep';
+      $('view-rows').hidden = view !== 'rows';
+      $('view-trans').hidden = view !== 'trans';
+      document.querySelector('.actions').style.display = view === 'sweep' ? '' : 'none';
+      renderView();
+    })
+  );
   document.querySelectorAll('.dim button').forEach(b =>
     b.addEventListener('click', () => {
       if (state.running) return;
       const dim = b.dataset.dim;
       state[dim] = Math.max(MIND, Math.min(MAXD, state[dim] + (+b.dataset.d)));
       renderAll();
+      renderView();
     })
   );
   btnMul.addEventListener('click', run);
@@ -479,7 +647,9 @@
   state.A = [[1, 2, 3], [4, 5, 6]];
   state.B = [[1, 4], [2, 5], [3, 6]];
   renderAll();
-  if (location.hash === '#auto') run();
+  const hash = location.hash.slice(1);
+  if (hash === 'auto') run();
+  else if (hash === 'rows' || hash === 'trans') document.querySelector(`.tab[data-view="${hash}"]`).click();
 })();
 </script>
 </body>
