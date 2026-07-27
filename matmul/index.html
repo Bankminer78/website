@@ -115,6 +115,22 @@
       background: color-mix(in srgb, var(--vc) 14%, transparent);
     }
     .cap { text-align: center; color: var(--muted); font-size: .75rem; max-width: 38rem; margin: 1.6rem auto 0; }
+    .cap b { color: var(--fg); }
+
+    /* ---- attention view ---- */
+    #view-attn { --s: 38px; }
+    .attnline { margin: 1.1rem auto; }
+    .legend { text-align: center; color: var(--muted); font-size: .75rem; margin-bottom: 1.2rem; }
+    .legend i { display: inline-block; width: .7em; height: .7em; border-radius: 50%; margin: 0 .3em 0 .9em; vertical-align: baseline; }
+    .cell.soft { border-style: dashed; color: var(--muted); background: transparent; }
+    .cell.filled { animation: pop .3s ease; font-weight: 700; }
+    .cell.hl { box-shadow: inset 0 0 0 2px var(--accent); }
+    .sarr { color: var(--muted); font-size: .68rem; text-align: center; line-height: 1.4; }
+    .matrow { display: flex; align-items: center; gap: .4rem; }
+    .rowlabs { display: grid; padding: 8px 0; align-content: center; }
+    .rowlabs span { height: var(--s); display: flex; align-items: center; font-size: .62rem; font-weight: 700; }
+    .collabs { display: grid; margin: 0 auto .15rem; width: fit-content; padding: 0 12px 0 12px; }
+    .collabs span { text-align: center; font-size: .62rem; font-weight: 700; }
 
     /* ---- stage / equation ---- */
     #stage {
@@ -220,6 +236,7 @@
     <button class="tab active" data-view="sweep">sweep</button>
     <button class="tab" data-view="rows">row stack</button>
     <button class="tab" data-view="trans">transpose</button>
+    <button class="tab" data-view="attn">attention</button>
   </div>
 
   <div class="controls">
@@ -230,7 +247,9 @@
 
   <div class="actions">
     <button id="multiply">multiply</button>
+    <button id="stepbtn">step</button>
     <button id="pause" disabled>pause</button>
+    <button id="endbtn">to end</button>
     <button id="reset">reset</button>
     <label class="speed">speed <input id="speed" type="range" min="0.5" max="3" step="0.25" value="1" /></label>
   </div>
@@ -263,6 +282,15 @@
     (here x is the first column of B.)</p>
   </section>
 
+  <section id="view-attn" hidden>
+    <div class="legend" id="attnlegend"></div>
+    <div id="attnwrap"></div>
+    <div class="actions"><button id="attnplay">play</button><button id="attnstep">step</button><button id="attnend">to end</button></div>
+    <p class="cap"><b>attention is two matmuls.</b>
+    <b>routing:</b> S = Q·Kᵀ dots every query row with every key row — the transpose trick turns a stack of rows into an all-pairs dot grid — and softmax makes each score row a set of weights.
+    <b>mixing:</b> out = W·V is the row-stack view — each output token is a weighted blend of the value rows, and its color is the blend of the tokens it read from.</p>
+  </section>
+
   <footer>
     after <a href="http://matrixmultiplication.xyz" target="_blank" rel="noopener">matrixmultiplication.xyz</a>
     by <a href="https://github.com/staltz/matrixmultiplication.xyz" target="_blank" rel="noopener">André Staltz</a>
@@ -281,6 +309,7 @@
     m: 2, n: 3, p: 2,
     A: [], B: [],
     running: false, paused: false, stopFlag: false, speed: 1,
+    stepMode: false, stepReq: 0, finishFlag: false,
   };
   let flyer = null;
 
@@ -358,7 +387,7 @@
   }
 
   /* ---------- static views ---------- */
-  function staticMatrix(vals, label, colorFn, keyFn) {
+  function staticMatrix(vals, label, colorFn, keyFn, deco, labs) {
     const mat = document.createElement('div');
     mat.className = 'mat';
     if (label != null) {
@@ -377,9 +406,39 @@
       if (String(v).length > 3) cell.classList.add('long');
       if (keyFn) cell.dataset.key = keyFn(r, c);
       cell.textContent = v;
+      if (deco) deco(cell, r, c);
       g.appendChild(cell);
     }));
-    br.appendChild(g); mat.appendChild(br);
+    br.appendChild(g);
+    if (labs && labs.cols) {
+      const cl = document.createElement('div');
+      cl.className = 'collabs';
+      cl.style.gridTemplateColumns = `repeat(${vals[0].length}, var(--s))`;
+      cl.style.gap = 'var(--g)';
+      labs.cols.forEach(([t, col]) => {
+        const s = document.createElement('span');
+        s.textContent = t; s.style.color = col;
+        cl.appendChild(s);
+      });
+      mat.appendChild(cl);
+    }
+    if (labs && labs.rows) {
+      const mr = document.createElement('div');
+      mr.className = 'matrow';
+      const rl = document.createElement('div');
+      rl.className = 'rowlabs';
+      rl.style.gridTemplateRows = `repeat(${vals.length}, var(--s))`;
+      rl.style.gap = 'var(--g)';
+      labs.rows.forEach(([t, col]) => {
+        const s = document.createElement('span');
+        s.textContent = t; s.style.color = col;
+        rl.appendChild(s);
+      });
+      mr.appendChild(rl); mr.appendChild(br);
+      mat.appendChild(mr);
+    } else {
+      mat.appendChild(br);
+    }
     return mat;
   }
   const opEl = (s) => { const d = document.createElement('div'); d.className = 'op'; d.textContent = s; return d; };
@@ -494,6 +553,152 @@
     tBusy = false;
   }
 
+  /* ---------- attention view ---------- */
+  const ATT = {
+    Q: [[2, 0], [0, 2], [1, 1]],
+    K: [[3, 1], [0, 3], [1, 2]],
+    V: [[10, 0], [0, 10], [5, 5]],
+    W: [[.9, 0, .1], [0, .8, .2], [.6, .2, .2]],
+  };
+  const NT = 3;
+  const tok = (i) => colorFor(i + 1, NT);
+  const fmt = (v) => { const s = String(v); return s.startsWith('0.') ? s.slice(1) : s; };
+  let attnGen = 0, matWEl = null;
+  let attnMode = 'play', attnSteps = 0, attnFinish = false, attnRunning = false;
+
+  function tokRGB(i) {
+    const cs = getComputedStyle(document.documentElement);
+    const s = parseFloat(cs.getPropertyValue('--vs')) / 100;
+    const l = parseFloat(cs.getPropertyValue('--vl')) / 100;
+    const h = (200 + i * 360 / NT) % 360;
+    const f = (n) => {
+      const k = (n + h / 30) % 12, a = s * Math.min(l, 1 - l);
+      return Math.round(255 * (l - a * Math.max(-1, Math.min(k - 3, 9 - k, 1))));
+    };
+    return [f(0), f(8), f(4)];
+  }
+
+  function renderAttn() {
+    const wrap = $('attnwrap');
+    wrap.innerHTML = '';
+    const { Q, K, V, W } = ATT;
+    const S = Q.map(q => K.map(k => q.reduce((s, v, d) => s + v * k[d], 0)));
+    const KT = K[0].map((_, d) => K.map(r => r[d]));
+    const id = (p) => (cell, r, c) => { cell.dataset.aid = `${p}-${r}-${c}`; };
+    const hidden = (p) => (cell, r, c) => {
+      cell.dataset.aid = `${p}-${r}-${c}`;
+      cell.dataset.v = cell.textContent;
+      cell.textContent = '·';
+      cell.classList.add('soft');
+    };
+    const tlabs = [0, 1, 2].map(i => [`t${'₁₂₃'[i]}`, tok(i)]);
+    const l1 = document.createElement('div');
+    l1.className = 'rline attnline';
+    l1.appendChild(staticMatrix(Q, 'Q (queries)', (r) => tok(r), null, id('q'), { rows: tlabs }));
+    l1.appendChild(opEl('×'));
+    l1.appendChild(staticMatrix(KT, 'Kᵀ (keys)', (r, c) => tok(c), null, id('k'), { cols: tlabs }));
+    l1.appendChild(opEl('='));
+    l1.appendChild(staticMatrix(S, 'S = Q·Kᵀ', null, null, hidden('s')));
+    const arr = document.createElement('div');
+    arr.className = 'sarr';
+    arr.innerHTML = 'softmax<br>rows →';
+    l1.appendChild(arr);
+    matWEl = staticMatrix(W.map(r => r.map(fmt)), 'W (weights)', null, null, (cell, r, c) => {
+      cell.dataset.aid = `w-${r}-${c}`;
+      const [R, G, B] = tokRGB(c);
+      cell.style.background = `rgba(${R},${G},${B},${ATT.W[r][c] * .8})`;
+    });
+    matWEl.style.opacity = '0';
+    matWEl.style.transition = 'opacity .5s ease';
+    l1.appendChild(matWEl);
+    const l2 = document.createElement('div');
+    l2.className = 'rline attnline';
+    l2.appendChild(staticMatrix(W.map(r => r.map(fmt)), 'W', null, null, (cell, r, c) => {
+      cell.dataset.aid = `w2-${r}-${c}`;
+      const [R, G, B] = tokRGB(c);
+      cell.style.background = `rgba(${R},${G},${B},${ATT.W[r][c] * .8})`;
+    }));
+    l2.appendChild(opEl('×'));
+    l2.appendChild(staticMatrix(V, 'V (values)', (r) => tok(r), null, id('v'), { rows: tlabs }));
+    l2.appendChild(opEl('='));
+    const out = W.map(w => V[0].map((_, d) => +(w.reduce((s, wj, j) => s + wj * V[j][d], 0)).toFixed(1)));
+    l2.appendChild(staticMatrix(out.map(r => r.map(fmt)), 'out = W·V', null, null, hidden('o'), { rows: tlabs }));
+    wrap.appendChild(l1);
+    wrap.appendChild(l2);
+    const leg = $('attnlegend');
+    leg.innerHTML = 'the rows are tokens — one color each:';
+    for (let i = 0; i < NT; i++) {
+      const dot = document.createElement('i');
+      dot.style.background = tok(i);
+      leg.appendChild(dot);
+      leg.appendChild(document.createTextNode(`token ${i + 1} (t${'₁₂₃'[i]})`));
+    }
+  }
+
+  async function playAttn() {
+    const gen = ++attnGen;
+    attnRunning = true;
+    const wrap = $('attnwrap');
+    const cell = (p, r, c) => wrap.querySelector(`[data-aid="${p}-${r}-${c}"]`);
+    const alive = () => gen === attnGen && view === 'attn';
+    const sl = (ms) => new Promise(r => setTimeout(r, ms));
+    // timed wait that collapses when "to end" is pressed
+    const asl = async (ms) => { let t = 0; while (t < ms && !attnFinish) { await sl(40); t += 40; } };
+    // in step mode, block until the user clicks "step"
+    const agate = async () => {
+      if (attnFinish) return;
+      while (attnMode === 'step' && attnSteps === 0 && !attnFinish && alive()) await sl(60);
+      if (attnMode === 'step' && attnSteps > 0) attnSteps--;
+    };
+    try {
+      const { Q, V, W } = ATT;
+      const dk = Q[0].length, dv = V[0].length;
+      await asl(450); if (!alive()) return;
+      for (let i = 0; i < NT; i++) for (let j = 0; j < NT; j++) {
+        await agate(); if (!alive()) return;
+        const hls = [];
+        for (let d = 0; d < dk; d++) hls.push(cell('q', i, d), cell('k', d, j));
+        hls.forEach(e => e.classList.add('hl'));
+        await asl(380); if (!alive()) return;
+        const sc = cell('s', i, j);
+        sc.textContent = sc.dataset.v;
+        sc.classList.remove('soft');
+        sc.classList.add('filled');
+        await asl(160); if (!alive()) return;
+        hls.forEach(e => e.classList.remove('hl'));
+      }
+      await agate(); if (!alive()) return;
+      await asl(300); if (!alive()) return;
+      matWEl.style.opacity = '1';
+      await asl(800); if (!alive()) return;
+      for (let i = 0; i < NT; i++) {
+        await agate(); if (!alive()) return;
+        const hls = [];
+        for (let j = 0; j < NT; j++) {
+          hls.push(cell('w2', i, j));
+          if (W[i][j] > 0) for (let d = 0; d < dv; d++) hls.push(cell('v', j, d));
+        }
+        hls.forEach(e => e.classList.add('hl'));
+        await asl(500); if (!alive()) return;
+        const mix = [0, 1, 2].map(ch => Math.round(W[i].reduce((s, w, j) => s + w * tokRGB(j)[ch], 0)));
+        const lum = .299 * mix[0] + .587 * mix[1] + .114 * mix[2];
+        for (let d = 0; d < dv; d++) {
+          const oc = cell('o', i, d);
+          oc.textContent = oc.dataset.v;
+          oc.classList.remove('soft');
+          oc.classList.add('filled');
+          oc.style.background = `rgb(${mix.join(',')})`;
+          oc.style.borderColor = 'transparent';
+          oc.style.color = lum > 150 ? '#101010' : '#f5f5f0';
+        }
+        await asl(620); if (!alive()) return;
+        hls.forEach(e => e.classList.remove('hl'));
+      }
+    } finally {
+      if (gen === attnGen) { attnRunning = false; attnFinish = false; }
+    }
+  }
+
   /* ---------- flyer ---------- */
   function buildFlyer() {
     flyer = document.createElement('div');
@@ -539,6 +744,7 @@
 
   // t = 0: hovering just above row 1 of A; t >= 1: bottom chip-row covers A row t.
   function positionFlyer(t, dur) {
+    if (state.finishFlag) dur = 0;
     const { S, G, pitch } = metrics();
     const a = gridA.getBoundingClientRect(), st = stage.getBoundingClientRect();
     const visH = state.p * S + (state.p - 1) * G;
@@ -550,12 +756,25 @@
   /* ---------- animation ---------- */
   function wait(ms) {
     return new Promise((res, rej) => {
+      if (state.finishFlag) { res(); return; }
       let el = 0;
       const iv = setInterval(() => {
         if (state.stopFlag) { clearInterval(iv); rej('stop'); return; }
+        if (state.finishFlag) { clearInterval(iv); res(); return; }
         if (!state.paused) { el += 40 * state.speed; if (el >= ms) { clearInterval(iv); res(); } }
       }, 40);
     });
+  }
+
+  const rawSleep = (ms) => new Promise(r => setTimeout(r, ms));
+  // in step mode, block until the user clicks "step" (or leaves step mode)
+  async function beat() {
+    if (state.finishFlag) return;
+    while (state.stepMode && state.stepReq === 0 && !state.finishFlag) {
+      if (state.stopFlag) throw 'stop';
+      await rawSleep(60);
+    }
+    if (state.stepMode && state.stepReq > 0) state.stepReq--;
   }
 
   function activePairs(t) {
@@ -628,6 +847,9 @@
     stage.style.setProperty('--reserve-bot', '0px');
     setRunningUI(false);
     state.paused = false;
+    state.stepMode = false;
+    state.stepReq = 0;
+    state.finishFlag = false;
     btnPause.textContent = 'pause';
     // restore dim-button enabled/disabled bounds
     document.querySelectorAll('.dim button').forEach(b => {
@@ -656,6 +878,7 @@
       positionFlyer(0, 550);                 // glide to just above A
       await wait(640);
       for (let t = 1; t <= state.m + state.p - 1; t++) {
+        await beat();
         positionFlyer(t, 380);
         await wait(430);
         const acts = activePairs(t);
@@ -684,6 +907,11 @@
   function renderView() {
     if (view === 'rows') renderRows();
     if (view === 'trans') renderTrans();
+    if (view === 'attn') {
+      renderAttn();
+      attnMode = 'play'; attnFinish = false; attnSteps = 0;
+      setTimeout(() => { if (view === 'attn') playAttn(); }, 350);
+    }
   }
   document.querySelectorAll('.tab').forEach(tb =>
     tb.addEventListener('click', () => {
@@ -694,6 +922,7 @@
       $('view-sweep').hidden = view !== 'sweep';
       $('view-rows').hidden = view !== 'rows';
       $('view-trans').hidden = view !== 'trans';
+      $('view-attn').hidden = view !== 'attn';
       document.querySelector('.actions').style.display = view === 'sweep' ? '' : 'none';
       renderView();
       if (view === 'trans' && !autoFlipped) {
@@ -704,6 +933,18 @@
   );
   let autoFlipped = false;
   $('flipbtn').addEventListener('click', flip);
+  $('attnplay').addEventListener('click', () => {
+    attnMode = 'play'; attnFinish = false; attnSteps = 0;
+    renderAttn(); playAttn();
+  });
+  $('attnstep').addEventListener('click', () => {
+    if (attnRunning) { attnMode = 'step'; attnSteps++; }
+    else { attnMode = 'step'; attnFinish = false; attnSteps = 0; renderAttn(); playAttn(); }
+  });
+  $('attnend').addEventListener('click', () => {
+    attnFinish = true;
+    if (!attnRunning) { renderAttn(); playAttn(); }
+  });
   document.querySelectorAll('.dim button').forEach(b =>
     b.addEventListener('click', () => {
       if (state.running) return;
@@ -713,10 +954,23 @@
       renderView();
     })
   );
-  btnMul.addEventListener('click', run);
+  btnMul.addEventListener('click', () => { state.stepMode = false; run(); });
   btnPause.addEventListener('click', () => {
     state.paused = !state.paused;
     btnPause.textContent = state.paused ? 'resume' : 'pause';
+  });
+  $('stepbtn').addEventListener('click', () => {
+    state.paused = false;
+    btnPause.textContent = 'pause';
+    state.stepMode = true;
+    if (!state.running) run();
+    else state.stepReq++;
+  });
+  $('endbtn').addEventListener('click', () => {
+    state.paused = false;
+    btnPause.textContent = 'pause';
+    state.finishFlag = true;
+    if (!state.running) run();
   });
   btnReset.addEventListener('click', () => {
     state.stopFlag = true;
@@ -729,7 +983,7 @@
   renderAll();
   const hash = location.hash.slice(1);
   if (hash === 'auto') run();
-  else if (hash === 'rows' || hash === 'trans') document.querySelector(`.tab[data-view="${hash}"]`).click();
+  else if (hash === 'rows' || hash === 'trans' || hash === 'attn') document.querySelector(`.tab[data-view="${hash}"]`).click();
 })();
 </script>
 </body>
