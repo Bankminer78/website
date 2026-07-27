@@ -91,11 +91,24 @@
       gap: .75rem; margin: .6rem auto; min-width: max-content;
     }
     .vstack { text-align: center; color: var(--muted); margin: 1.2rem 0 .8rem; font-size: .85rem; }
-    .tpanels { display: flex; justify-content: center; gap: 3.5rem; flex-wrap: wrap; align-items: flex-start; min-width: max-content; margin: 0 auto; }
-    .tpanel { text-align: center; }
-    .tpanel h2 { font-size: .78rem; color: var(--muted); font-weight: 500; margin: 0 0 1.1rem; line-height: 1.7; }
-    .tpanel h2 b { color: var(--fg); }
-    .teq { display: flex; justify-content: center; align-items: center; gap: .7rem; }
+    .tmode { text-align: center; color: var(--muted); font-size: .78rem; margin-bottom: 1.4rem; }
+    .tmode b { color: var(--fg); }
+    #tstage { position: relative; margin: 0 auto; }
+    .teq {
+      position: absolute; inset: 0;
+      display: flex; align-items: center; justify-content: center;
+      opacity: 0; visibility: hidden; transition: opacity .28s ease;
+    }
+    .teq.show { opacity: 1; visibility: visible; }
+    .teqrow { display: flex; align-items: center; gap: .7rem; }
+    .fcell {
+      position: absolute; z-index: 4; margin: 0;
+      background: var(--bg);
+      transition-property: left, top;
+      transition-duration: .7s;
+      transition-timing-function: cubic-bezier(.45, 0, .25, 1);
+    }
+    .fcell.tint { background: color-mix(in srgb, var(--vc) 14%, var(--bg)); }
     .cell.tint {
       color: var(--vc); font-weight: 700;
       border-color: color-mix(in srgb, var(--vc) 45%, transparent);
@@ -242,9 +255,11 @@
   </section>
 
   <section id="view-trans" hidden>
+    <div class="tmode" id="tmode"></div>
     <div id="transwrap"></div>
+    <div class="actions"><button id="flipbtn">transpose ⇄</button></div>
     <p class="cap">math thinks in column vectors: y = A·x. code usually stores x as a row, so the same product is written y = x·Aᵀ.
-    transposing flips the whole equation — (A·x)ᵀ = xᵀ·Aᵀ — same numbers, laid on their side.
+    transposing flips the whole equation — (A·x)ᵀ = xᵀ·Aᵀ — watch each entry reflect across the diagonal: same numbers, laid on their side.
     (here x is the first column of B.)</p>
   </section>
 
@@ -343,7 +358,7 @@
   }
 
   /* ---------- static views ---------- */
-  function staticMatrix(vals, label, colorFn) {
+  function staticMatrix(vals, label, colorFn, keyFn) {
     const mat = document.createElement('div');
     mat.className = 'mat';
     if (label != null) {
@@ -360,6 +375,7 @@
       const col = colorFn && colorFn(r, c);
       if (col) { cell.classList.add('tint'); cell.style.setProperty('--vc', col); }
       if (String(v).length > 3) cell.classList.add('long');
+      if (keyFn) cell.dataset.key = keyFn(r, c);
       cell.textContent = v;
       g.appendChild(cell);
     }));
@@ -392,32 +408,90 @@
     wrap.appendChild(last);
   }
 
+  const T_TITLES = {
+    col: 'math · column vectors — <b>y = A·x</b>',
+    row: 'code · row vectors — <b>y = x·Aᵀ</b>',
+  };
+  let tcur = 'col', tBusy = false, tEls = null;
+
   function renderTrans() {
     const wrap = $('transwrap');
     wrap.innerHTML = '';
+    tcur = 'col'; tBusy = false;
     const x = state.B.map(r => [r[0]]);
     const y = state.A.map(row => [row.reduce((s, a, k) => s + a * x[k][0], 0)]);
     const AT = state.A[0].map((_, c) => state.A.map(r => r[c]));
     const xT = [x.map(r => r[0])];
     const yT = [y.map(r => r[0])];
-    const panels = document.createElement('div');
-    panels.className = 'tpanels';
-    const mk = (title, parts) => {
-      const p = document.createElement('div'); p.className = 'tpanel';
-      const h = document.createElement('h2'); h.innerHTML = title; p.appendChild(h);
+    const tstage = document.createElement('div');
+    tstage.id = 'tstage';
+    const mkeq = (parts) => {
       const eq = document.createElement('div'); eq.className = 'teq';
-      parts.forEach(el => eq.appendChild(el)); p.appendChild(eq);
-      return p;
+      const row = document.createElement('div'); row.className = 'teqrow';
+      parts.forEach(p => row.appendChild(p)); eq.appendChild(row);
+      tstage.appendChild(eq);
+      return eq;
     };
-    panels.appendChild(mk('math · column vectors<br><b>y = A·x</b>', [
-      staticMatrix(state.A, 'A'), opEl('×'), staticMatrix(x, 'x'), opEl('='),
-      staticMatrix(y, 'y', (r) => colorFor(r + 1, state.m)),
-    ]));
-    panels.appendChild(mk('code · row vectors<br><b>y = x·Aᵀ</b>', [
-      staticMatrix(xT, 'xᵀ'), opEl('×'), staticMatrix(AT, 'Aᵀ'), opEl('='),
-      staticMatrix(yT, 'yᵀ', (r, c) => colorFor(c + 1, state.m)),
-    ]));
-    wrap.appendChild(panels);
+    const yc = (i) => colorFor(i + 1, state.m);
+    const eqCol = mkeq([
+      staticMatrix(state.A, 'A', null, (r, c) => `a-${r}-${c}`), opEl('×'),
+      staticMatrix(x, 'x', null, (r) => `x-${r}`), opEl('='),
+      staticMatrix(y, 'y', (r) => yc(r), (r) => `y-${r}`),
+    ]);
+    const eqRow = mkeq([
+      staticMatrix(xT, 'xᵀ', null, (r, c) => `x-${c}`), opEl('×'),
+      staticMatrix(AT, 'Aᵀ', null, (r, c) => `a-${c}-${r}`), opEl('='),
+      staticMatrix(yT, 'yᵀ', (r, c) => yc(c), (r, c) => `y-${c}`),
+    ]);
+    eqCol.classList.add('show');
+    wrap.appendChild(tstage);
+    const h = Math.max(eqCol.firstChild.offsetHeight, eqRow.firstChild.offsetHeight);
+    const w = Math.max(eqCol.firstChild.offsetWidth, eqRow.firstChild.offsetWidth);
+    tstage.style.height = `${h + 24}px`;
+    tstage.style.minWidth = `${w}px`;
+    tEls = { tstage, eqCol, eqRow };
+    $('tmode').innerHTML = T_TITLES.col;
+  }
+
+  async function flip() {
+    if (tBusy || !tEls) return;
+    tBusy = true;
+    $('flipbtn').disabled = true;
+    const { tstage, eqCol, eqRow } = tEls;
+    const from = tcur === 'col' ? eqCol : eqRow;
+    const to = tcur === 'col' ? eqRow : eqCol;
+    const sR = tstage.getBoundingClientRect();
+    const clones = [];
+    let maxDelay = 0;
+    from.querySelectorAll('[data-key]').forEach(src => {
+      const dst = to.querySelector(`[data-key="${src.dataset.key}"]`);
+      if (!dst) return;
+      const r1 = src.getBoundingClientRect(), r2 = dst.getBoundingClientRect();
+      const cl = src.cloneNode(true);
+      cl.classList.add('fcell');
+      cl.style.left = `${r1.left - sR.left}px`;
+      cl.style.top = `${r1.top - sR.top}px`;
+      // stagger along the diagonal so A visibly reflects across it
+      const k = src.dataset.key.split('-');
+      const delay = (k[0] === 'a' ? (+k[1] + +k[2]) : +k[1]) * 70;
+      maxDelay = Math.max(maxDelay, delay);
+      cl.style.transitionDelay = `${delay}ms`;
+      cl.dataset.tx = `${r2.left - sR.left}px`;
+      cl.dataset.ty = `${r2.top - sR.top}px`;
+      tstage.appendChild(cl);
+      clones.push(cl);
+    });
+    from.classList.remove('show');
+    void tstage.offsetWidth; // flush layout so transitions start from the source positions
+    clones.forEach(cl => { cl.style.left = cl.dataset.tx; cl.style.top = cl.dataset.ty; });
+    await new Promise(r => setTimeout(r, 780 + maxDelay));
+    tcur = tcur === 'col' ? 'row' : 'col';
+    to.classList.add('show');
+    $('tmode').innerHTML = T_TITLES[tcur];
+    await new Promise(r => setTimeout(r, 250));
+    clones.forEach(c => c.remove());
+    $('flipbtn').disabled = false;
+    tBusy = false;
   }
 
   /* ---------- flyer ---------- */
@@ -622,8 +696,14 @@
       $('view-trans').hidden = view !== 'trans';
       document.querySelector('.actions').style.display = view === 'sweep' ? '' : 'none';
       renderView();
+      if (view === 'trans' && !autoFlipped) {
+        autoFlipped = true;
+        setTimeout(() => { if (view === 'trans') flip(); }, 900);
+      }
     })
   );
+  let autoFlipped = false;
+  $('flipbtn').addEventListener('click', flip);
   document.querySelectorAll('.dim button').forEach(b =>
     b.addEventListener('click', () => {
       if (state.running) return;
