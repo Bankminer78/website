@@ -558,13 +558,22 @@
     Q: [[2, 0], [0, 2], [1, 1]],
     K: [[3, 1], [0, 3], [1, 2]],
     V: [[10, 0], [0, 10], [5, 5]],
-    W: [[.9, 0, .1], [0, .8, .2], [.6, .2, .2]],
   };
   const NT = 3;
   const tok = (i) => colorFor(i + 1, NT);
   const fmt = (v) => { const s = String(v); return s.startsWith('0.') ? s.slice(1) : s; };
-  let attnGen = 0, matWEl = null;
+  let attnGen = 0, matWEl = null, attnWr = null;
   let attnMode = 'play', attnSteps = 0, attnFinish = false, attnRunning = false;
+  // softmax each row of S, rounded to 2dp so the displayed numbers multiply out
+  function attnWeights(S) {
+    return S.map(row => {
+      const m = Math.max(...row);
+      const e = row.map(v => Math.exp(v - m));
+      const sum = e.reduce((a, b) => a + b, 0);
+      return e.map(v => Math.round((v / sum) * 100) / 100);
+    });
+  }
+  const fmtW = (v) => v >= 1 ? '1' : String(v).replace('0.', '.');
 
   function tokRGB(i) {
     const cs = getComputedStyle(document.documentElement);
@@ -579,12 +588,30 @@
   }
 
   function renderAttn() {
+    attnGen++; // invalidate any running play
+    attnRunning = false;
     const wrap = $('attnwrap');
     wrap.innerHTML = '';
-    const { Q, K, V, W } = ATT;
+    const { Q, K, V } = ATT;
     const S = Q.map(q => K.map(k => q.reduce((s, v, d) => s + v * k[d], 0)));
+    const W = attnWr = attnWeights(S);
     const KT = K[0].map((_, d) => K.map(r => r[d]));
     const id = (p) => (cell, r, c) => { cell.dataset.aid = `${p}-${r}-${c}`; };
+    const withEdit = (base, get, set, name) => (cell, r, c) => {
+      base(cell, r, c);
+      const inp = document.createElement('input');
+      inp.type = 'number'; inp.min = -10; inp.max = 10;
+      inp.value = get(r, c);
+      inp.setAttribute('aria-label', `${name}[${r + 1}][${c + 1}]`);
+      inp.addEventListener('change', () => {
+        let v = parseInt(inp.value, 10);
+        if (!Number.isFinite(v)) v = 0;
+        set(r, c, Math.max(-10, Math.min(10, v)));
+        renderAttn();
+      });
+      cell.textContent = '';
+      cell.appendChild(inp);
+    };
     const hidden = (p) => (cell, r, c) => {
       cell.dataset.aid = `${p}-${r}-${c}`;
       cell.dataset.v = cell.textContent;
@@ -594,32 +621,35 @@
     const tlabs = [0, 1, 2].map(i => [`t${'₁₂₃'[i]}`, tok(i)]);
     const l1 = document.createElement('div');
     l1.className = 'rline attnline';
-    l1.appendChild(staticMatrix(Q, 'Q (queries)', (r) => tok(r), null, id('q'), { rows: tlabs }));
+    l1.appendChild(staticMatrix(Q, 'Q (queries)', (r) => tok(r), null,
+      withEdit(id('q'), (r, c) => Q[r][c], (r, c, v) => { Q[r][c] = v; }, 'Q'), { rows: tlabs }));
     l1.appendChild(opEl('×'));
-    l1.appendChild(staticMatrix(KT, 'Kᵀ (keys)', (r, c) => tok(c), null, id('k'), { cols: tlabs }));
+    l1.appendChild(staticMatrix(KT, 'Kᵀ (keys)', (r, c) => tok(c), null,
+      withEdit(id('k'), (r, c) => K[c][r], (r, c, v) => { K[c][r] = v; }, 'Kᵀ'), { cols: tlabs }));
     l1.appendChild(opEl('='));
     l1.appendChild(staticMatrix(S, 'S = Q·Kᵀ', null, null, hidden('s')));
     const arr = document.createElement('div');
     arr.className = 'sarr';
     arr.innerHTML = 'softmax<br>rows →';
     l1.appendChild(arr);
-    matWEl = staticMatrix(W.map(r => r.map(fmt)), 'W (weights)', null, null, (cell, r, c) => {
+    matWEl = staticMatrix(W.map(r => r.map(fmtW)), 'W (weights)', null, null, (cell, r, c) => {
       cell.dataset.aid = `w-${r}-${c}`;
       const [R, G, B] = tokRGB(c);
-      cell.style.background = `rgba(${R},${G},${B},${ATT.W[r][c] * .8})`;
+      cell.style.background = `rgba(${R},${G},${B},${W[r][c] * .8})`;
     });
     matWEl.style.opacity = '0';
     matWEl.style.transition = 'opacity .5s ease';
     l1.appendChild(matWEl);
     const l2 = document.createElement('div');
     l2.className = 'rline attnline';
-    l2.appendChild(staticMatrix(W.map(r => r.map(fmt)), 'W', null, null, (cell, r, c) => {
+    l2.appendChild(staticMatrix(W.map(r => r.map(fmtW)), 'W', null, null, (cell, r, c) => {
       cell.dataset.aid = `w2-${r}-${c}`;
       const [R, G, B] = tokRGB(c);
-      cell.style.background = `rgba(${R},${G},${B},${ATT.W[r][c] * .8})`;
+      cell.style.background = `rgba(${R},${G},${B},${W[r][c] * .8})`;
     }));
     l2.appendChild(opEl('×'));
-    l2.appendChild(staticMatrix(V, 'V (values)', (r) => tok(r), null, id('v'), { rows: tlabs }));
+    l2.appendChild(staticMatrix(V, 'V (values)', (r) => tok(r), null,
+      withEdit(id('v'), (r, c) => V[r][c], (r, c, v) => { V[r][c] = v; }, 'V'), { rows: tlabs }));
     l2.appendChild(opEl('='));
     const out = W.map(w => V[0].map((_, d) => +(w.reduce((s, wj, j) => s + wj * V[j][d], 0)).toFixed(1)));
     l2.appendChild(staticMatrix(out.map(r => r.map(fmt)), 'out = W·V', null, null, hidden('o'), { rows: tlabs }));
@@ -651,7 +681,8 @@
       if (attnMode === 'step' && attnSteps > 0) attnSteps--;
     };
     try {
-      const { Q, V, W } = ATT;
+      const { Q, V } = ATT;
+      const W = attnWr;
       const dk = Q[0].length, dv = V[0].length;
       await asl(450); if (!alive()) return;
       for (let i = 0; i < NT; i++) for (let j = 0; j < NT; j++) {
@@ -676,7 +707,7 @@
         const hls = [];
         for (let j = 0; j < NT; j++) {
           hls.push(cell('w2', i, j));
-          if (W[i][j] > 0) for (let d = 0; d < dv; d++) hls.push(cell('v', j, d));
+          if (W[i][j] >= .05) for (let d = 0; d < dv; d++) hls.push(cell('v', j, d));
         }
         hls.forEach(e => e.classList.add('hl'));
         await asl(500); if (!alive()) return;
@@ -920,6 +951,7 @@
       $('view-trans').hidden = view !== 'trans';
       $('view-attn').hidden = view !== 'attn';
       document.querySelector('.actions').style.display = view === 'sweep' ? '' : 'none';
+      document.querySelector('.controls').style.display = view === 'attn' ? 'none' : '';
       renderView();
       if (view === 'trans' && !autoFlipped) {
         autoFlipped = true;
