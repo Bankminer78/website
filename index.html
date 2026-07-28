@@ -1,0 +1,360 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Niranjan</title>
+  <meta name="description" content="Niranjan Baskaran — math, hardware, building stuff." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700;800&display=swap" />
+  <style>
+    :root {
+      --bg: #0e0e0e;
+      --fg: #f5f5f0;
+      --muted: #8a8a82;
+      --accent: #f5a524;
+      --outside-alpha: 0.12;
+    }
+    @media (prefers-color-scheme: light) {
+      :root { --bg: #f5f5f0; --fg: #0e0e0e; --muted: #5a5a52; --accent: #b86d00; --outside-alpha: 0.18; }
+    }
+
+    * { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; height: 100%; }
+    body {
+      background: var(--bg);
+      color: var(--fg);
+      font-family: "Berkeley Mono", "TX-02", "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      min-height: 100dvh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 2rem 1rem;
+      line-height: 1.5;
+      text-align: center;
+    }
+    main {
+      width: 100%;
+      max-width: 64rem;
+    }
+
+    .name-stage {
+      position: relative;
+      width: 100%;
+      aspect-ratio: 5 / 1.4;
+      margin: 0 0 2rem;
+    }
+    .name-stage canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+    }
+    .sr-only {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      padding: 0;
+      margin: -1px;
+      overflow: hidden;
+      clip: rect(0 0 0 0);
+      white-space: nowrap;
+      border: 0;
+    }
+
+    p.subtitle {
+      color: var(--muted);
+      font-size: 1.05rem;
+      margin: 0 0 2.5rem;
+    }
+    ul.links {
+      list-style: none;
+      padding: 0;
+      margin: 0;
+      display: flex;
+      flex-direction: row;
+      justify-content: center;
+      align-items: center;
+      gap: 1.75rem;
+    }
+    ul.links a {
+      color: var(--muted);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 2rem;
+      height: 2rem;
+      transition: color 140ms ease, transform 140ms ease;
+    }
+    ul.links a:hover,
+    ul.links a:focus-visible {
+      color: var(--fg);
+      transform: translateY(-1px);
+      outline: none;
+    }
+    ul.links svg {
+      width: 1.35rem;
+      height: 1.35rem;
+      fill: currentColor;
+    }
+    ul.links .mask-icon {
+      display: inline-block;
+      width: 1.35rem;
+      height: 1.35rem;
+      background-color: currentColor;
+      -webkit-mask-image: var(--mask);
+      mask-image: var(--mask);
+      -webkit-mask-repeat: no-repeat;
+      mask-repeat: no-repeat;
+      -webkit-mask-position: center;
+      mask-position: center;
+      -webkit-mask-size: contain;
+      mask-size: contain;
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <div class="name-stage">
+      <h1 class="sr-only">NIRANJAN</h1>
+      <canvas aria-hidden="true"></canvas>
+    </div>
+    <p class="subtitle">I like math, hardware, and building stuff.</p>
+    <ul class="links">
+      <li>
+        <a href="https://github.com/Bankminer78" rel="me" aria-label="GitHub">
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M12 .5C5.65.5.5 5.65.5 12c0 5.08 3.29 9.39 7.86 10.91.58.1.79-.25.79-.56 0-.28-.01-1.02-.02-2-3.2.69-3.87-1.54-3.87-1.54-.52-1.33-1.28-1.69-1.28-1.69-1.05-.72.08-.7.08-.7 1.16.08 1.77 1.19 1.77 1.19 1.03 1.77 2.7 1.26 3.36.96.1-.75.4-1.26.73-1.55-2.55-.29-5.24-1.28-5.24-5.69 0-1.26.45-2.29 1.18-3.1-.12-.29-.51-1.46.11-3.05 0 0 .96-.31 3.16 1.18a10.93 10.93 0 0 1 5.75 0c2.2-1.49 3.16-1.18 3.16-1.18.62 1.59.23 2.76.11 3.05.74.81 1.18 1.84 1.18 3.1 0 4.42-2.7 5.39-5.27 5.68.41.36.78 1.07.78 2.16 0 1.56-.01 2.81-.01 3.19 0 .31.21.67.8.55C20.22 21.39 23.5 17.08 23.5 12 23.5 5.65 18.35.5 12 .5z"/>
+          </svg>
+        </a>
+      </li>
+      <li>
+        <a href="https://www.linkedin.com/in/niranjan-baskaran-a906a5205/" rel="me" aria-label="LinkedIn">
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M20.45 20.45h-3.55v-5.57c0-1.33-.02-3.04-1.85-3.04-1.86 0-2.14 1.45-2.14 2.94v5.67H9.36V9h3.41v1.56h.05c.47-.9 1.64-1.85 3.37-1.85 3.6 0 4.27 2.37 4.27 5.46v6.28zM5.34 7.43a2.06 2.06 0 1 1 0-4.11 2.06 2.06 0 0 1 0 4.11zM7.12 20.45H3.56V9h3.56v11.45zM22.22 0H1.77C.79 0 0 .77 0 1.72v20.56C0 23.23.79 24 1.77 24h20.45c.98 0 1.78-.77 1.78-1.72V1.72C24 .77 23.2 0 22.22 0z"/>
+          </svg>
+        </a>
+      </li>
+      <li>
+        <a href="https://x.com/bankminer78" rel="me" aria-label="X">
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/>
+          </svg>
+        </a>
+      </li>
+      <li>
+        <a href="https://confluence.sh/" rel="me" aria-label="Confluence Labs">
+          <span class="mask-icon" style="--mask: url('confluence-mark.png')"></span>
+        </a>
+      </li>
+    </ul>
+  </main>
+
+  <script>
+    (function () {
+      const canvas = document.querySelector('.name-stage canvas');
+      const stage = canvas.parentElement;
+      const ctx = canvas.getContext('2d', { alpha: false });
+
+      // Romanized Thirukural couplets on learning, firmness, and boldness.
+      // Drawn from chapters 40 (Kalvi), 67 (Vinaith-thittpam), and 78
+      // (Padaikku-anjaamai). Looped to fill the grid.
+      const CANNED_TEXT = (
+        "Karka kasadara karpavai katrapin nirka adharkuth thaga. " +
+        "En enba enai ezhuthu enba ivvirandum kan enba vazhum uyirkku. " +
+        "Kannudaiyaar enbavar katror mukhathu irandu pun udaiyar enbar. " +
+        "Yaadhanin yaadhanin neengiyaan nodhal adhanin adhanin ilan. " +
+        "Thondrin manaR keniyu maandharku katraaru kalvi sirakkum. " +
+        "Vinaith thittpam enpadhu oruvan manath thittpam matraiya ellaam pira. " +
+        "Ennith thuniga karumam thunindhapin ennuvam enpadhu izhukku. " +
+        "Thunivudaiyaar tholiledum tholaar tholilaadhar tholar. " +
+        "Anjaamai eegai aRivudaimai indhu naankum kondaarku perumai. " +
+        "Padaikku anjaamai mun nilai veeram thunivudaimai venriyin nilai. " +
+        "Karka kasadara karpavai katrapin nirka adharkuth thaga. " +
+        "Vinaith thittpam manath thittpam matraiya ellaam pira. " +
+        "Yaadhanin yaadhanin neengiyaan nodhal adhanin adhanin ilan. " +
+        "Ennith thuniga karumam thunindhapin ennuvam enpadhu izhukku. "
+      ).replace(/\s+/g, ' ');
+
+      const FONT_PX = 3;
+      const CELL_FONT = `500 ${FONT_PX}px "Berkeley Mono", "TX-02", "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace`;
+      const MASK_FONT_FAMILY = `"Berkeley Mono", "TX-02", "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace`;
+
+      let raf = 0;
+
+      function buildMask(W, H) {
+        const m = document.createElement('canvas');
+        m.width = W; m.height = H;
+        const mctx = m.getContext('2d');
+        mctx.fillStyle = '#fff';
+
+        // Choose font size so NIRANJAN spans ~92% of the canvas width.
+        let fSize = H * 0.95;
+        const setFont = (s) => {
+          mctx.font = `800 ${s}px ${MASK_FONT_FAMILY}`;
+          if ('letterSpacing' in mctx) mctx.letterSpacing = '0.06em';
+        };
+        setFont(fSize);
+
+        // measureText doesn't account for letterSpacing in older browsers; correct for it.
+        const lsExtra = (size) => ('letterSpacing' in mctx ? 0 : size * 0.06 * 7);
+        const widthAt = (s) => { setFont(s); return mctx.measureText('NIRANJAN').width + lsExtra(s); };
+        const targetW = W * 0.92;
+        const w0 = widthAt(fSize);
+        if (w0 > targetW) fSize *= targetW / w0;
+
+        setFont(fSize);
+        mctx.textBaseline = 'middle';
+        mctx.textAlign = 'center';
+        mctx.fillText('NIRANJAN', W / 2, H / 2);
+        return mctx.getImageData(0, 0, W, H).data;
+      }
+
+      function setup() {
+        cancelAnimationFrame(raf);
+
+        const dpr = Math.min(2, window.devicePixelRatio || 1);
+        const W = stage.clientWidth;
+        const H = stage.clientHeight;
+        if (W < 80 || H < 30) return;
+
+        canvas.width = Math.round(W * dpr);
+        canvas.height = Math.round(H * dpr);
+        const c = ctx;
+        c.setTransform(1, 0, 0, 1, 0, 0);
+        c.scale(dpr, dpr);
+
+        const cs = getComputedStyle(document.documentElement);
+        const bg = getComputedStyle(document.body).backgroundColor;
+        const fg = cs.getPropertyValue('--fg').trim() || '#f5f5f0';
+        const outsideAlpha = parseFloat(cs.getPropertyValue('--outside-alpha')) || 0.12;
+
+        c.fillStyle = bg;
+        c.fillRect(0, 0, W, H);
+
+        c.font = CELL_FONT;
+        c.textBaseline = 'top';
+        const charW = c.measureText('M').width;
+        const charH = FONT_PX * 1.1;
+
+        const COLS = Math.floor(W / charW);
+        const ROWS = Math.floor(H / charH);
+        if (COLS < 8 || ROWS < 4) return;
+
+        const xOffset = (W - COLS * charW) / 2;
+        const yOffset = (H - ROWS * charH) / 2;
+
+        const mask = buildMask(W, H);
+
+        const cells = new Array(COLS * ROWS);
+        for (let r = 0; r < ROWS; r++) {
+          for (let cx = 0; cx < COLS; cx++) {
+            const px = Math.min(W - 1, Math.floor(xOffset + cx * charW + charW / 2));
+            const py = Math.min(H - 1, Math.floor(yOffset + r * charH + charH / 2));
+            const inside = mask[(py * W + px) * 4 + 3] > 80;
+            cells[r * COLS + cx] = {
+              x: xOffset + cx * charW,
+              y: yOffset + r * charH,
+              inside,
+              char: CANNED_TEXT.charAt((r * COLS + cx) % CANNED_TEXT.length),
+              word: null
+            };
+          }
+        }
+
+        // Group consecutive non-space cells into words, classify whole-word
+        // by sampling mask at the word's middle cell. Schedule a fade-in
+        // window per word so the page denoises out of blackness.
+        const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
+        const words = [];
+        let cur = null;
+        for (let k = 0; k < cells.length; k++) {
+          const cell = cells[k];
+          if (cell.char === ' ' || cell.char === '') {
+            if (cur) { words.push(cur); cur = null; }
+          } else {
+            if (!cur) cur = { cells: [] };
+            cur.cells.push(k);
+          }
+        }
+        if (cur) words.push(cur);
+
+        for (let w = 0; w < words.length; w++) {
+          const word = words[w];
+          const mid = cells[word.cells[word.cells.length >> 1]];
+          word.inside = mid.inside;
+          // Outside words emerge first (the dim "dust"); inside words
+          // crystallize into the silhouette slightly later.
+          if (word.inside) {
+            word.tStart = 1800 + Math.random() * 2400;
+          } else {
+            word.tStart = Math.random() * 1800;
+          }
+          word.tDur = 600 + Math.random() * 700;
+          if (reduceMotion) { word.tStart = 0; word.tDur = 1; }
+          for (let ci = 0; ci < word.cells.length; ci++) cells[word.cells[ci]].word = word;
+        }
+
+        const t0 = performance.now();
+
+        function smoothstep(x) {
+          if (x <= 0) return 0;
+          if (x >= 1) return 1;
+          return x * x * (3 - 2 * x);
+        }
+
+        function frame(t) {
+          const elapsed = t - t0;
+          c.fillStyle = bg;
+          c.fillRect(0, 0, W, H);
+          c.font = CELL_FONT;
+          c.textBaseline = 'top';
+          c.fillStyle = fg;
+
+          let allDone = true;
+
+          // Outside (dim) pass.
+          for (let k = 0; k < cells.length; k++) {
+            const cell = cells[k];
+            const word = cell.word;
+            if (!word || word.inside) continue;
+            const p = smoothstep((elapsed - word.tStart) / word.tDur);
+            if (p < 1) allDone = false;
+            if (p <= 0) continue;
+            c.globalAlpha = p * outsideAlpha;
+            c.fillText(cell.char, cell.x, cell.y);
+          }
+
+          // Inside (bright) pass.
+          for (let k = 0; k < cells.length; k++) {
+            const cell = cells[k];
+            const word = cell.word;
+            if (!word || !word.inside) continue;
+            const p = smoothstep((elapsed - word.tStart) / word.tDur);
+            if (p < 1) allDone = false;
+            if (p <= 0) continue;
+            c.globalAlpha = p;
+            c.fillText(cell.char, cell.x, cell.y);
+          }
+
+          c.globalAlpha = 1;
+          if (!allDone) raf = requestAnimationFrame(frame);
+        }
+
+        raf = requestAnimationFrame(frame);
+      }
+
+      const ready = (document.fonts && document.fonts.ready)
+        ? document.fonts.ready
+        : Promise.resolve();
+      ready.then(() => requestAnimationFrame(setup));
+
+      let resizeTimer;
+      window.addEventListener('resize', () => {
+        clearTimeout(resizeTimer);
+        resizeTimer = setTimeout(setup, 200);
+      });
+    })();
+  </script>
+</body>
+</html>
