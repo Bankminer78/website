@@ -119,7 +119,14 @@
 
     /* ---- attention view ---- */
     #view-attn { --s: 38px; }
+    #attnwrap { overflow-x: auto; padding: 0 .5rem; }
     .attnline { margin: 1.1rem auto; }
+    .projline {
+      display: flex; flex-wrap: wrap; justify-content: center;
+      gap: 0 2.2rem; margin-bottom: .6rem;
+      border-bottom: 1px solid var(--line); padding-bottom: 1rem;
+    }
+    .peq { margin: .5rem 0; }
     .legend { text-align: center; color: var(--muted); font-size: .75rem; margin-bottom: 1.2rem; }
     .legend i { display: inline-block; width: .7em; height: .7em; border-radius: 50%; margin: 0 .3em 0 .9em; vertical-align: baseline; }
     .cell.soft { border-style: dashed; color: var(--muted); background: transparent; }
@@ -283,10 +290,15 @@
   </section>
 
   <section id="view-attn" hidden>
+    <div class="controls">
+      <div class="dim"><span>tokens</span> <button data-adim="n" data-d="-1">−</button><b id="anval"></b><button data-adim="n" data-d="1">+</button></div>
+      <div class="dim"><span>embed dim</span> <button data-adim="d" data-d="-1">−</button><b id="adval"></b><button data-adim="d" data-d="1">+</button></div>
+    </div>
     <div class="legend" id="attnlegend"></div>
     <div id="attnwrap"></div>
     <div class="actions"><button id="attnstep">step</button><button id="attnplay">play</button><button id="attnend">to end</button></div>
-    <p class="cap"><b>attention is two matmuls.</b>
+    <p class="cap"><b>attention is matmul all the way down.</b>
+    <b>projections:</b> the tokens are just rows of X — three matmuls (X·W<sub>q</sub>, X·W<sub>k</sub>, X·W<sub>v</sub>) turn each token row into its query, key, and value.
     <b>routing:</b> S = Q·Kᵀ dots every query row with every key row — the transpose trick turns a stack of rows into an all-pairs dot grid — and softmax makes each score row a set of weights.
     <b>mixing:</b> out = W·V is the row-stack view — each output token is a weighted blend of the value rows, and its color is the blend of the tokens it read from.</p>
   </section>
@@ -555,14 +567,17 @@
 
   /* ---------- attention view ---------- */
   const ATT = {
-    Q: [[2, 0], [0, 2], [1, 1]],
-    K: [[3, 1], [0, 3], [1, 2]],
-    V: [[10, 0], [0, 10], [5, 5]],
+    n: 3, d: 2,
+    X: [[1, 0], [0, 1], [1, 1]],
+    Wq: [[2, 0], [0, 2]],
+    Wk: [[3, 0], [0, 3]],
+    Wv: [[10, 0], [0, 10]],
   };
-  const NT = 3;
-  const tok = (i) => colorFor(i + 1, NT);
+  const SUB = '₁₂₃₄₅';
+  const mm = (A, B) => A.map(row => B[0].map((_, j) => row.reduce((s, v, k) => s + v * B[k][j], 0)));
+  const tok = (i) => colorFor(i + 1, ATT.n);
   const fmt = (v) => { const s = String(v); return s.startsWith('0.') ? s.slice(1) : s; };
-  let attnGen = 0, matWEl = null, attnWr = null;
+  let attnGen = 0, matWEl = null, attnWr = null, attnQ = null, attnV = null;
   let attnMode = 'play', attnSteps = 0, attnFinish = false, attnRunning = false;
   // softmax each row of S, rounded to 2dp so the displayed numbers multiply out
   function attnWeights(S) {
@@ -579,7 +594,7 @@
     const cs = getComputedStyle(document.documentElement);
     const s = parseFloat(cs.getPropertyValue('--vs')) / 100;
     const l = parseFloat(cs.getPropertyValue('--vl')) / 100;
-    const h = (200 + i * 360 / NT) % 360;
+    const h = (200 + i * 360 / ATT.n) % 360;
     const f = (n) => {
       const k = (n + h / 30) % 12, a = s * Math.min(l, 1 - l);
       return Math.round(255 * (l - a * Math.max(-1, Math.min(k - 3, 9 - k, 1))));
@@ -592,10 +607,13 @@
     attnRunning = false;
     const wrap = $('attnwrap');
     wrap.innerHTML = '';
-    const { Q, K, V } = ATT;
-    const S = Q.map(q => K.map(k => q.reduce((s, v, d) => s + v * k[d], 0)));
+    const { n, d, X, Wq, Wk, Wv } = ATT;
+    const Q = attnQ = mm(X, Wq);
+    const K = mm(X, Wk);
+    const V = attnV = mm(X, Wv);
+    const S = Q.map(q => K.map(k => q.reduce((s, v, dd) => s + v * k[dd], 0)));
     const W = attnWr = attnWeights(S);
-    const KT = K[0].map((_, d) => K.map(r => r[d]));
+    const KT = K[0].map((_, dd) => K.map(r => r[dd]));
     const id = (p) => (cell, r, c) => { cell.dataset.aid = `${p}-${r}-${c}`; };
     const withEdit = (base, get, set, name) => (cell, r, c) => {
       base(cell, r, c);
@@ -618,14 +636,29 @@
       cell.textContent = '·';
       cell.classList.add('soft');
     };
-    const tlabs = [0, 1, 2].map(i => [`t${'₁₂₃'[i]}`, tok(i)]);
+    const tlabs = Array.from({ length: n }, (_, i) => [`t${SUB[i]}`, tok(i)]);
+    // projection stage: token embeddings X become Q, K, V
+    const proj = document.createElement('div');
+    proj.className = 'projline';
+    const editX = withEdit(() => {}, (r, c) => X[r][c], (r, c, v) => { X[r][c] = v; }, 'X');
+    [['Wq', 'q', Q, 'Q'], ['Wk', 'k', K, 'K'], ['Wv', 'v', V, 'V']].forEach(([wkey, sub, M, mname]) => {
+      const eq = document.createElement('div');
+      eq.className = 'rline peq';
+      eq.appendChild(staticMatrix(X, 'X (tokens)', (r) => tok(r), null, editX, { rows: tlabs }));
+      eq.appendChild(opEl('×'));
+      const WM = ATT[wkey];
+      eq.appendChild(staticMatrix(WM, `W<sub>${sub}</sub>`, null, null,
+        withEdit(() => {}, (r, c) => WM[r][c], (r, c, v) => { WM[r][c] = v; }, wkey)));
+      eq.appendChild(opEl('='));
+      eq.appendChild(staticMatrix(M, `${mname} = X·W<sub>${sub}</sub>`, (r) => tok(r)));
+      proj.appendChild(eq);
+    });
+    wrap.appendChild(proj);
     const l1 = document.createElement('div');
     l1.className = 'rline attnline';
-    l1.appendChild(staticMatrix(Q, 'Q (queries)', (r) => tok(r), null,
-      withEdit(id('q'), (r, c) => Q[r][c], (r, c, v) => { Q[r][c] = v; }, 'Q'), { rows: tlabs }));
+    l1.appendChild(staticMatrix(Q, 'Q (queries)', (r) => tok(r), null, id('q'), { rows: tlabs }));
     l1.appendChild(opEl('×'));
-    l1.appendChild(staticMatrix(KT, 'Kᵀ (keys)', (r, c) => tok(c), null,
-      withEdit(id('k'), (r, c) => K[c][r], (r, c, v) => { K[c][r] = v; }, 'Kᵀ'), { cols: tlabs }));
+    l1.appendChild(staticMatrix(KT, 'Kᵀ (keys)', (r, c) => tok(c), null, id('k'), { cols: tlabs }));
     l1.appendChild(opEl('='));
     l1.appendChild(staticMatrix(S, 'S = Q·Kᵀ', null, null, hidden('s')));
     const arr = document.createElement('div');
@@ -648,8 +681,7 @@
       cell.style.background = `rgba(${R},${G},${B},${W[r][c] * .8})`;
     }));
     l2.appendChild(opEl('×'));
-    l2.appendChild(staticMatrix(V, 'V (values)', (r) => tok(r), null,
-      withEdit(id('v'), (r, c) => V[r][c], (r, c, v) => { V[r][c] = v; }, 'V'), { rows: tlabs }));
+    l2.appendChild(staticMatrix(V, 'V (values)', (r) => tok(r), null, id('v'), { rows: tlabs }));
     l2.appendChild(opEl('='));
     const out = W.map(w => V[0].map((_, d) => +(w.reduce((s, wj, j) => s + wj * V[j][d], 0)).toFixed(1)));
     l2.appendChild(staticMatrix(out.map(r => r.map(fmt)), 'out = W·V', null, null, hidden('o'), { rows: tlabs }));
@@ -657,12 +689,18 @@
     wrap.appendChild(l2);
     const leg = $('attnlegend');
     leg.innerHTML = 'the rows are tokens — one color each:';
-    for (let i = 0; i < NT; i++) {
+    for (let i = 0; i < n; i++) {
       const dot = document.createElement('i');
       dot.style.background = tok(i);
       leg.appendChild(dot);
-      leg.appendChild(document.createTextNode(`token ${i + 1} (t${'₁₂₃'[i]})`));
+      leg.appendChild(document.createTextNode(`token ${i + 1} (t${SUB[i]})`));
     }
+    $('anval').textContent = n;
+    $('adval').textContent = d;
+    document.querySelectorAll('[data-adim]').forEach(b => {
+      const k = b.dataset.adim, v = ATT[k], hi = k === 'n' ? 5 : 3;
+      b.disabled = +b.dataset.d < 0 ? v <= 2 : v >= hi;
+    });
   }
 
   async function playAttn() {
@@ -681,11 +719,10 @@
       if (attnMode === 'step' && attnSteps > 0) attnSteps--;
     };
     try {
-      const { Q, V } = ATT;
-      const W = attnWr;
+      const Q = attnQ, V = attnV, W = attnWr, n = ATT.n;
       const dk = Q[0].length, dv = V[0].length;
       await asl(450); if (!alive()) return;
-      for (let i = 0; i < NT; i++) for (let j = 0; j < NT; j++) {
+      for (let i = 0; i < n; i++) for (let j = 0; j < n; j++) {
         await agate(); if (!alive()) return;
         const hls = [];
         for (let d = 0; d < dk; d++) hls.push(cell('q', i, d), cell('k', d, j));
@@ -702,10 +739,10 @@
       await asl(300); if (!alive()) return;
       matWEl.style.opacity = '1';
       await asl(800); if (!alive()) return;
-      for (let i = 0; i < NT; i++) {
+      for (let i = 0; i < n; i++) {
         await agate(); if (!alive()) return;
         const hls = [];
-        for (let j = 0; j < NT; j++) {
+        for (let j = 0; j < n; j++) {
           hls.push(cell('w2', i, j));
           if (W[i][j] >= .05) for (let d = 0; d < dv; d++) hls.push(cell('v', j, d));
         }
@@ -973,6 +1010,15 @@
     attnFinish = true;
     if (!attnRunning) { renderAttn(); playAttn(); }
   });
+  document.querySelectorAll('[data-adim]').forEach(b =>
+    b.addEventListener('click', () => {
+      const k = b.dataset.adim, hi = k === 'n' ? 5 : 3;
+      ATT[k] = Math.max(2, Math.min(hi, ATT[k] + (+b.dataset.d)));
+      ATT.X = resizeGrid(ATT.X, ATT.n, ATT.d);
+      ['Wq', 'Wk', 'Wv'].forEach(w => ATT[w] = resizeGrid(ATT[w], ATT.d, ATT.d));
+      renderAttn();
+    })
+  );
   document.querySelectorAll('.dim button').forEach(b =>
     b.addEventListener('click', () => {
       if (state.running) return;
