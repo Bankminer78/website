@@ -68,8 +68,8 @@
     }
     .actions button:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
     .actions button:disabled { opacity: .3; cursor: default; }
-    .actions #multiply, .actions #attnstep { border-color: var(--accent); color: var(--accent); }
-    .actions #multiply:hover:not(:disabled), .actions #attnstep:hover:not(:disabled) { background: var(--accent); color: var(--bg); }
+    .actions #multiply, .actions #attnstep, .actions #tilstep { border-color: var(--accent); color: var(--accent); }
+    .actions #multiply:hover:not(:disabled), .actions #attnstep:hover:not(:disabled), .actions #tilstep:hover:not(:disabled) { background: var(--accent); color: var(--bg); }
     .speed { display: flex; align-items: center; gap: .5rem; font-size: .75rem; color: var(--muted); }
     .speed input { accent-color: var(--accent); width: 90px; }
 
@@ -127,6 +127,17 @@
       border-bottom: 1px solid var(--line); padding-bottom: 1rem;
     }
     .peq { margin: .5rem 0; }
+    /* ---- tiling view ---- */
+    #view-tiling { --s: 24px; --g: 3px; }
+    #tilewrap { overflow-x: auto; padding: 0 .5rem; }
+    #view-tiling .cell { border-radius: 4px; }
+    #view-tiling .cell.ck { background: color-mix(in srgb, var(--fg) 11%, transparent); }
+    #tilestats, #tilestat {
+      text-align: center; color: var(--muted); font-size: .75rem;
+      max-width: 640px; margin: 0 auto .5rem; line-height: 1.5;
+    }
+    #tilestat { min-height: 1.2em; margin-top: .6rem; }
+    .tilesizes button.active { border-color: var(--accent); color: var(--accent); }
     .legend { text-align: center; color: var(--muted); font-size: .75rem; margin-bottom: 1.2rem; }
     .legend i { display: inline-block; width: .7em; height: .7em; border-radius: 50%; margin: 0 .3em 0 .9em; vertical-align: baseline; }
     .cell.soft { border-style: dashed; color: var(--muted); background: transparent; }
@@ -244,6 +255,7 @@
     <button class="tab" data-view="rows">row stack</button>
     <button class="tab" data-view="trans">transpose</button>
     <button class="tab" data-view="attn">attention</button>
+    <button class="tab" data-view="tiling">tiling (GPU)</button>
   </div>
 
   <div class="controls">
@@ -301,6 +313,23 @@
     <b>projections:</b> the tokens are just rows of X — three matmuls (X·W<sub>q</sub>, X·W<sub>k</sub>, X·W<sub>v</sub>) turn each token row into its query, key, and value.
     <b>routing:</b> S = Q·Kᵀ dots every query row with every key row — the transpose trick turns a stack of rows into an all-pairs dot grid — and softmax makes each score row a set of weights.
     <b>mixing:</b> out = W·V is the row-stack view — each output token is a weighted blend of the value rows, and its color is the blend of the tokens it read from.</p>
+  </section>
+
+  <section id="view-tiling" hidden>
+    <div class="controls tilesizes">
+      <div class="dim"><span>tile size</span>
+        <button data-tile="1">1×1</button><button data-tile="2">2×2</button><button data-tile="4">4×4</button><button data-tile="8">8×8</button>
+      </div>
+    </div>
+    <div id="tilestats"></div>
+    <div id="tilewrap"></div>
+    <div id="tilestat" aria-live="polite"></div>
+    <div class="actions"><button id="tilstep">step</button><button id="tilplay">play</button><button id="tilend">to end</button></div>
+    <p class="cap"><b>this is how a GPU actually does it.</b>
+    C is cut into square blocks (the checkerboard), and each block is assigned to its own compute unit — on real hardware they all run at once.
+    a unit owns one tile of C: it marches along the shared dimension, pulling one tile of A and one tile of B at a time into fast on-chip memory, multiplying and accumulating into its tile.
+    tiling is all about <b>reuse</b>: every number in a T×T tile loaded once feeds T multiplies, so bigger tiles mean fewer trips to slow memory — until the tiles stop fitting in on-chip memory.
+    picking that sweet spot is most of what makes matmul kernels fast.</p>
   </section>
 
   <footer>
@@ -970,12 +999,92 @@
     }
   }
 
+  /* ---------- tiling / GPU view ---------- */
+  const TIL = { N: 8, T: 4 };
+  let tilGen = 0, tilMode = 'play', tilSteps = 0, tilFinish = false, tilRunning = false;
+
+  function renderTiling() {
+    tilGen++; // invalidate any running play
+    tilRunning = false;
+    const { N, T } = TIL;
+    const wrap = $('tilewrap');
+    wrap.innerHTML = '';
+    const empty = Array.from({ length: N }, () => Array(N).fill(''));
+    const deco = (p) => (cell, r, c) => {
+      cell.dataset.tid = `${p}-${r}-${c}`;
+      if ((Math.floor(r / T) + Math.floor(c / T)) % 2 === 1) cell.classList.add('ck');
+    };
+    const line = document.createElement('div');
+    line.className = 'rline';
+    line.appendChild(staticMatrix(empty, 'A', null, null, deco('a')));
+    line.appendChild(opEl('×'));
+    line.appendChild(staticMatrix(empty, 'B', null, null, deco('b')));
+    line.appendChild(opEl('='));
+    line.appendChild(staticMatrix(empty, 'C = A·B', null, null, deco('c')));
+    wrap.appendChild(line);
+    const nb = N / T, ops = nb ** 3, muls = N ** 3, loads = 2 * muls / T;
+    $('tilestats').textContent = T === 1
+      ? `no tiling — ${ops} scalar steps · ${muls} multiplies · ${loads} loads: every multiply fetches both numbers fresh from memory`
+      : T === N
+        ? `one ${T}×${T} tile — the whole matmul in one step: maximum reuse, but the tiles must fit in on-chip memory`
+        : `${nb}×${nb} blocks of C · ${nb} chunks each · ${ops} tile-steps · ${muls} multiplies · ${loads} loads: every number loaded is reused ${T}×`;
+    $('tilestat').textContent = '';
+    document.querySelectorAll('[data-tile]').forEach(b => b.classList.toggle('active', +b.dataset.tile === T));
+  }
+
+  async function playTiling() {
+    const gen = ++tilGen;
+    tilRunning = true;
+    const { N, T } = TIL;
+    const nb = N / T;
+    const wrap = $('tilewrap');
+    const cellsOf = (p, bi, bj) => {
+      const out = [];
+      for (let r = bi * T; r < (bi + 1) * T; r++)
+        for (let c = bj * T; c < (bj + 1) * T; c++)
+          out.push(wrap.querySelector(`[data-tid="${p}-${r}-${c}"]`));
+      return out;
+    };
+    const alive = () => gen === tilGen && view === 'tiling';
+    const sl = (ms) => new Promise(r => setTimeout(r, ms));
+    const asl = async (ms) => { let t = 0; while (t < ms && !tilFinish) { await sl(Math.min(40, ms)); t += 40; } };
+    const agate = async () => {
+      if (tilFinish) return;
+      if (tilMode === 'step') {
+        while (tilMode === 'step' && tilSteps === 0 && !tilFinish && alive()) await sl(60);
+        if (tilSteps > 0) tilSteps--;
+      }
+    };
+    const dwell = T === 1 ? 14 : T === 2 ? 110 : T === 4 ? 420 : 900;
+    try {
+      for (let bi = 0; bi < nb; bi++) for (let bj = 0; bj < nb; bj++) {
+        for (let k = 0; k < nb; k++) {
+          await agate(); if (!alive()) return;
+          const hls = [...cellsOf('a', bi, k), ...cellsOf('b', k, bj)];
+          hls.forEach(e => e.classList.add('hl'));
+          if (!tilFinish && T > 1) $('tilestat').textContent =
+            `block (${bi + 1},${bj + 1}) of C — chunk ${k + 1}/${nb}: load A tile (${bi + 1},${k + 1}) and B tile (${k + 1},${bj + 1}) on-chip, multiply, accumulate`;
+          await asl(dwell); if (!alive()) return;
+          cellsOf('c', bi, bj).forEach(e => {
+            e.style.background = `hsl(150 var(--vs) var(--vl) / ${((k + 1) / nb).toFixed(2)})`;
+          });
+          await asl(dwell * .6); if (!alive()) return;
+          hls.forEach(e => e.classList.remove('hl'));
+        }
+      }
+      $('tilestat').textContent = 'done — each block of C came from its row of A-tiles times its column of B-tiles';
+    } finally {
+      if (gen === tilGen) { tilRunning = false; tilFinish = false; }
+    }
+  }
+
   /* ---------- wiring ---------- */
   let view = 'sweep';
   function renderView() {
     if (view === 'rows') renderRows();
     if (view === 'trans') renderTrans();
     if (view === 'attn') renderAttn(); // waits for step or play — no auto-run
+    if (view === 'tiling') renderTiling();
   }
   document.querySelectorAll('.tab').forEach(tb =>
     tb.addEventListener('click', () => {
@@ -987,8 +1096,9 @@
       $('view-rows').hidden = view !== 'rows';
       $('view-trans').hidden = view !== 'trans';
       $('view-attn').hidden = view !== 'attn';
+      $('view-tiling').hidden = view !== 'tiling';
       document.querySelector('.actions').style.display = view === 'sweep' ? '' : 'none';
-      document.querySelector('.controls').style.display = view === 'attn' ? 'none' : '';
+      document.querySelector('.controls').style.display = (view === 'attn' || view === 'tiling') ? 'none' : '';
       renderView();
       if (view === 'trans' && !autoFlipped) {
         autoFlipped = true;
@@ -1010,6 +1120,21 @@
     attnFinish = true;
     if (!attnRunning) { renderAttn(); playAttn(); }
   });
+  $('tilplay').addEventListener('click', () => {
+    tilMode = 'play'; tilFinish = false; tilSteps = 0;
+    renderTiling(); playTiling();
+  });
+  $('tilstep').addEventListener('click', () => {
+    if (tilRunning) { tilMode = 'step'; tilSteps++; }
+    else { tilMode = 'step'; tilFinish = false; tilSteps = 0; renderTiling(); playTiling(); }
+  });
+  $('tilend').addEventListener('click', () => {
+    tilFinish = true;
+    if (!tilRunning) { renderTiling(); playTiling(); }
+  });
+  document.querySelectorAll('[data-tile]').forEach(b =>
+    b.addEventListener('click', () => { TIL.T = +b.dataset.tile; renderTiling(); })
+  );
   document.querySelectorAll('[data-adim]').forEach(b =>
     b.addEventListener('click', () => {
       const k = b.dataset.adim, hi = k === 'n' ? 5 : 3;
@@ -1057,7 +1182,7 @@
   renderAll();
   const hash = location.hash.slice(1);
   if (hash === 'auto') run();
-  else if (hash === 'rows' || hash === 'trans' || hash === 'attn') document.querySelector(`.tab[data-view="${hash}"]`).click();
+  else if (['rows', 'trans', 'attn', 'tiling'].includes(hash)) document.querySelector(`.tab[data-view="${hash}"]`).click();
 })();
 </script>
 </body>
