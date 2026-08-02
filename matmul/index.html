@@ -1056,19 +1056,22 @@
       }
     };
     const dwell = T === 1 ? 14 : T === 2 ? 110 : T === 4 ? 420 : 900;
+    // in step mode every sub-phase (highlight / accumulate / clear) waits for its own click
+    const pace = async (ms) => { if (tilMode === 'step') await agate(); else await asl(ms); };
+    const say = (msg) => { if (!tilFinish && (T > 1 || tilMode === 'step')) $('tilestat').textContent = msg; };
     try {
       for (let bi = 0; bi < nb; bi++) for (let bj = 0; bj < nb; bj++) {
         for (let k = 0; k < nb; k++) {
           await agate(); if (!alive()) return;
           const hls = [...cellsOf('a', bi, k), ...cellsOf('b', k, bj)];
           hls.forEach(e => e.classList.add('hl'));
-          if (!tilFinish && T > 1) $('tilestat').textContent =
-            `block (${bi + 1},${bj + 1}) of C — chunk ${k + 1}/${nb}: load A tile (${bi + 1},${k + 1}) and B tile (${k + 1},${bj + 1}) on-chip, multiply, accumulate`;
-          await asl(dwell); if (!alive()) return;
+          say(`block (${bi + 1},${bj + 1}) of C — chunk ${k + 1}/${nb}: load A tile (${bi + 1},${k + 1}) and B tile (${k + 1},${bj + 1}) into on-chip memory`);
+          await pace(dwell); if (!alive()) return;
           cellsOf('c', bi, bj).forEach(e => {
             e.style.background = `hsl(150 var(--vs) var(--vl) / ${((k + 1) / nb).toFixed(2)})`;
           });
-          await asl(dwell * .6); if (!alive()) return;
+          say(`multiply the tiles, accumulate into C block (${bi + 1},${bj + 1}) — ${k + 1}/${nb} of its sum done`);
+          await pace(dwell * .6); if (!alive()) return;
           hls.forEach(e => e.classList.remove('hl'));
         }
       }
@@ -1114,7 +1117,7 @@
   });
   $('attnstep').addEventListener('click', () => {
     if (attnRunning) { attnMode = 'step'; attnSteps++; }
-    else { attnMode = 'step'; attnFinish = false; attnSteps = 0; renderAttn(); playAttn(); }
+    else { attnMode = 'step'; attnFinish = false; attnSteps = 1; renderAttn(); playAttn(); }
   });
   $('attnend').addEventListener('click', () => {
     attnFinish = true;
@@ -1126,7 +1129,7 @@
   });
   $('tilstep').addEventListener('click', () => {
     if (tilRunning) { tilMode = 'step'; tilSteps++; }
-    else { tilMode = 'step'; tilFinish = false; tilSteps = 0; renderTiling(); playTiling(); }
+    else { tilMode = 'step'; tilFinish = false; tilSteps = 1; renderTiling(); playTiling(); }
   });
   $('tilend').addEventListener('click', () => {
     tilFinish = true;
